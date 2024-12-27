@@ -1,10 +1,13 @@
 package org.tradebot;
 
 
+import org.tradebot.binance.RestAPIService;
 import org.tradebot.domain.*;
 import org.tradebot.enums.ExecutionType;
 import org.tradebot.enums.ImbalanceState;
 import org.tradebot.enums.OrderType;
+import org.tradebot.listener.ImbalanceStateListener;
+import org.tradebot.listener.OrderBookListener;
 import org.tradebot.service.ImbalanceService;
 import org.tradebot.util.Log;
 
@@ -13,7 +16,7 @@ import java.util.*;
 /**
  * Класс описывающий стратегию открытия и закрытия сделок на основе технического анализа
  */
-public class Strategy {
+public class Strategy implements OrderBookListener, ImbalanceStateListener {
     /**
      * Текущее состояние программы.
      * Lifecycle:
@@ -40,14 +43,18 @@ public class Strategy {
     private static final long POSITION_LIVE_TIME = 240 * 60_000L;
 
     private final ImbalanceService imbalanceService;
-    private final TradingAPI tradingAPI;
 
+    private final RestAPIService apiService;
     public State state = State.WAIT_IMBALANCE;
 
+    private Map<Double, Double> bids = new TreeMap<>();
+    private Map<Double, Double> asks = new TreeMap<>();
+
+
     public Strategy(ImbalanceService imbalanceService,
-                    TradingAPI tradingAPI) {
+                    RestAPIService apiService) {
         this.imbalanceService = imbalanceService;
-        this.tradingAPI = tradingAPI;
+        this.apiService = apiService;
 
         //noinspection ConstantValue
         if (TAKES_COUNT > TAKE_PROFIT_THRESHOLDS.length) {
@@ -66,7 +73,8 @@ public class Strategy {
                 POSITION_LIVE_TIME/60_000L));
     }
 
-    public void onTick(long currentTime, MarketEntry currentEntry) throws Exception {
+    @Override
+    public void notify(long currentTime, ImbalanceState imbalanceState) {
         switch (state) {
             case WAIT_IMBALANCE -> {
                 /*
@@ -74,7 +82,7 @@ public class Strategy {
                  *    yes - change state to ENTRY_POINT_SEARCH
                  *    no - { return without state change }
                  */
-                if (imbalanceService.getCurrentState() == ImbalanceState.PROGRESS) {
+                if (imbalanceState == ImbalanceState.PROGRESS) {
                     state = State.ENTRY_POINT_SEARCH;
                 }
             }
@@ -84,7 +92,7 @@ public class Strategy {
                  *    yes - change state to POSSIBLE_ENTRY_POINT
                  *    no - { return without state change }
                  */
-                if (imbalanceService.getCurrentState() == ImbalanceState.POTENTIAL_END_POINT) {
+                if (imbalanceState == ImbalanceState.POTENTIAL_END_POINT) {
                     if (openPositions(currentTime, currentEntry)) {
                         state = State.POSITIONS_OPENED;
                     } else {
@@ -100,10 +108,13 @@ public class Strategy {
                  *    yes - change state to IMBALANCE_IN_PROGRESS
                  *    no - { return without state change }
                  */
-                List<Position> positions = tradingAPI.getOpenPositions();
-                closeByTimeout(currentTime, currentEntry, positions);
+                Position position = apiService.getOpenPosition();
+                closeByTimeout(currentTime, currentEntry, position);
 
-                positions = tradingAPI.getOpenPositions();
+                //TODO rewrite using one position partially closed instead of several positions
+                position = apiService.getOpenPosition();
+
+
                 if (TAKES_COUNT == 1) {
                     state = State.WAIT_POSITIONS_CLOSED;
                 } else {
@@ -122,10 +133,10 @@ public class Strategy {
                 }
             }
             case WAIT_POSITIONS_CLOSED -> {
-                List<Position> positions = tradingAPI.getOpenPositions();
+                List<Position> positions = apiService.getOpenPositions();
                 closeByTimeout(currentTime, currentEntry, positions);
 
-                positions = tradingAPI.getOpenPositions();
+                positions = apiService.getOpenPositions();
                 if (positions.isEmpty()) {
                     state = State.WAIT_IMBALANCE;
                 }
@@ -133,9 +144,9 @@ public class Strategy {
         }
     }
 
-    private boolean openPositions(long currentTime, MarketEntry currentEntry) throws Exception {
-        if (!tradingAPI.getOpenPositions().isEmpty()) {
-            throw new RuntimeException("Trying to open position while already opened " + tradingAPI.getOpenPositions().size());
+    private boolean openPositions(long currentTime, MarketEntry currentEntry) {
+        if (!apiService.getOpenPositions().isEmpty()) {
+            throw new RuntimeException("Trying to open position while already opened " + apiService.getOpenPositions().size());
         }
 
 
@@ -168,24 +179,27 @@ public class Strategy {
         }
         order.setTP_SL(takeProfitPrices, stopLossPrice);
 
-
         order.setCreateTime(currentTime);
         order.setMoneyAmount(calculatePositionSize());
-        tradingAPI.createLimitOrder(order);
+        String orderId = apiService.createLimitOrder(order);
 
         return true;
     }
 
-    private void closeByTimeout(long currentTime, MarketEntry currentEntry, List<Position> positions) {
-        positions.forEach(position -> {
-            if (currentTime - position.getOpenTime() > POSITION_LIVE_TIME) {
-                Log.debug(String.format("close positions with timeout %d minutes", POSITION_LIVE_TIME / 60_000L));
-                position.close(currentTime, currentEntry.average());
-            }
-        });
+    private void closeByTimeout(long currentTime, MarketEntry currentEntry, Position position) {
+        if (currentTime - position.getOpenTime() > POSITION_LIVE_TIME) {
+            Log.debug(String.format("close positions with timeout %d minutes", POSITION_LIVE_TIME / 60_000L));
+            position.close(currentTime, currentEntry.average());
+        }
     }
 
-    public double calculatePositionSize() throws Exception {
-        return tradingAPI.getAccountBalance() * tradingAPI.getLeverage();
+    public double calculatePositionSize() {
+        return apiService.getAccountBalance();
+    }
+
+    @Override
+    public void notify(Map<Double, Double> asks, Map<Double, Double> bids) {
+        this.asks = new TreeMap<>(asks);
+        this.bids = new TreeMap<>(bids).descendingMap();
     }
 }

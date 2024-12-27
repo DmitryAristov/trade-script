@@ -1,6 +1,6 @@
 package org.tradebot.service;
 
-import org.tradebot.TradingAPI;
+import org.tradebot.binance.RestAPIService;
 import org.tradebot.domain.MarketEntry;
 import org.tradebot.listener.VolatilityListener;
 import org.tradebot.util.Log;
@@ -8,8 +8,6 @@ import org.tradebot.util.Log;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.TreeMap;
-
-import static org.tradebot.TradingBot.SYMBOL;
 
 public class VolatilityService {
 
@@ -22,11 +20,11 @@ public class VolatilityService {
     private static final long AVERAGE_PRICE_CALCULATE_PAST_TIME = 1;
 
 
-    private final TradingAPI tradingAPI;
+    private final RestAPIService apiService;
     private final List<VolatilityListener> listeners = new ArrayList<>();
     private long lastUpdateTime = -1L;
 
-    public VolatilityService(TradingAPI tradingAPI) {
+    public VolatilityService(RestAPIService apiService) {
         Log.info(String.format("""
                         imbalance parameters:
                             update time period :: %d hours
@@ -35,10 +33,10 @@ public class VolatilityService {
                 UPDATE_TIME_PERIOD_MILLS / 3_600_000L,
                 VOLATILITY_CALCULATE_PAST_TIME,
                 AVERAGE_PRICE_CALCULATE_PAST_TIME));
-        this.tradingAPI = tradingAPI;
+        this.apiService = apiService;
     }
 
-    public void onTick(long currentTime, MarketEntry currentEntry) throws Exception {
+    public void onTick(long currentTime, MarketEntry currentEntry) {
         if (currentTime - lastUpdateTime > UPDATE_TIME_PERIOD_MILLS) {
             double volatility = calculateVolatility(currentTime);
             double average = calculateAverage(currentTime);
@@ -51,8 +49,8 @@ public class VolatilityService {
     /**
      * Метод определяет волатильность актива
      */
-    private double calculateVolatility(long currentTime) throws Exception {
-        TreeMap<Long, MarketEntry> marketData = tradingAPI.getMarketData(INTERVAL, VOLATILITY_CALCULATE_PAST_TIME);
+    private double calculateVolatility(long currentTime) {
+        TreeMap<Long, MarketEntry> marketData = apiService.getMarketData(INTERVAL, VOLATILITY_CALCULATE_PAST_TIME);
 
         if (marketData.size() < 2) {
             return 0.;
@@ -70,8 +68,8 @@ public class VolatilityService {
     /**
      * Метод определяет среднюю цену актива
      */
-    private double calculateAverage(long currentTime) throws Exception {
-        TreeMap<Long, MarketEntry> marketData = tradingAPI.getMarketData(INTERVAL, AVERAGE_PRICE_CALCULATE_PAST_TIME);
+    private double calculateAverage(long currentTime) {
+        TreeMap<Long, MarketEntry> marketData = apiService.getMarketData(INTERVAL, AVERAGE_PRICE_CALCULATE_PAST_TIME);
 
         if (marketData.size() < 2) {
             return 0.;

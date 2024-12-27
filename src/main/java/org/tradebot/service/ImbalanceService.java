@@ -1,15 +1,18 @@
 package org.tradebot.service;
 
+import org.tradebot.Strategy;
 import org.tradebot.domain.Imbalance;
 import org.tradebot.enums.ImbalanceState;
 import org.tradebot.domain.MarketEntry;
+import org.tradebot.listener.ImbalanceStateListener;
+import org.tradebot.listener.MarketDataListener;
 import org.tradebot.listener.VolatilityListener;
 import org.tradebot.util.Log;
 
 import java.util.*;
 import java.util.function.Predicate;
 
-public class ImbalanceService implements VolatilityListener {
+public class ImbalanceService implements VolatilityListener, MarketDataListener {
 
     /**
      * Время хранения ежесекундных данных (1000мс * 60с * 5м = 5 минут).
@@ -91,7 +94,8 @@ public class ImbalanceService implements VolatilityListener {
                 RETURNED_PRICE_IMBALANCE_PARTITION));
     }
 
-    public void onTick(long currentTime, MarketEntry currentEntry) {
+    @Override
+    public void notify(long currentTime, MarketEntry currentEntry) {
         updateData(currentTime, currentEntry);
         switch (currentState) {
             case WAIT -> detectImbalance(currentTime, currentEntry);
@@ -99,6 +103,7 @@ public class ImbalanceService implements VolatilityListener {
             case POTENTIAL_END_POINT -> evaluatePossibleEndPoint(currentTime, currentEntry);
             case COMPLETED -> saveCompletedImbalanceAndResetState();
         }
+        listeners.forEach(listener -> listener.notify(currentTime, currentState));
     }
 
     /**
@@ -366,5 +371,16 @@ public class ImbalanceService implements VolatilityListener {
 
     public LinkedList<Imbalance> getImbalances() {
         return imbalances;
+    }
+
+    private final List<ImbalanceStateListener> listeners = new ArrayList<>();
+    public void subscribe(ImbalanceStateListener listener) {
+        if (!listeners.contains(listener)) {
+            listeners.add(listener);
+        }
+    }
+
+    public void unsubscribe(ImbalanceStateListener listener) {
+        listeners.remove(listener);
     }
 }

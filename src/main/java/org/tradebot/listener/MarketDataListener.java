@@ -4,5 +4,5 @@ import org.tradebot.domain.MarketEntry;
 
 public interface MarketDataListener {
 
-    void notify(long timestamp, MarketEntry marketEntry) throws Exception;
+    void notify(long timestamp, MarketEntry marketEntry);
 }
