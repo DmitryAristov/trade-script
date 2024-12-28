@@ -2,6 +2,8 @@ package org.tradebot.binance;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.tradebot.domain.AccountInfo;
+import org.tradebot.domain.Order;
 import org.tradebot.util.Log;
 
 import javax.crypto.Mac;
@@ -18,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static org.tradebot.TradingBot.SYMBOL;
 
 public class RestAPIService {
 
@@ -25,48 +28,63 @@ public class RestAPIService {
     private static final String API_SECRET = "****";
     private static final String BASE_URL = "https://fapi.binance.com";
 
-    public String createLimitOrder() {
-        String endpoint = "/fapi/v1/order";
-        String method = "POST";
-
-        // Параметры ордера
+    public int placeOrder(Order order) {
         Map<String, String> params = new HashMap<>();
-        params.put("symbol", "DOGEUSDC");
-        params.put("side", "BUY");
-        params.put("type", "LIMIT");
-        params.put("timeInForce", "GTC");
-        params.put("quantity", "26");
-        params.put("price", "0.2");
-        params.put("reduceOnly", "false");
-        String response = sendRequest(endpoint, method, params);
 
-        return response;
+        // mandatory params
+        params.put("symbol", SYMBOL.toUpperCase());
+        params.put("side", order.getSide().toString());
+        params.put("type", order.getType().toString());
+
+        // optional params
+        if (order.getPrice() != null) {
+            params.put("price", String.valueOf(order.getPrice()));
+        }
+        if (order.getQuantity() != null) {
+            params.put("quantity", String.valueOf(order.getQuantity()));
+        }
+        if (order.getStopPrice() != null) {
+            params.put("stopPrice", String.valueOf(order.getStopPrice()));
+        }
+        if (order.isReduceOnly() != null) {
+            params.put("reduceOnly", String.valueOf(order.isReduceOnly()));
+        }
+        if (order.isClosePosition() != null) {
+            params.put("closePosition", String.valueOf(order.isClosePosition()));
+        }
+
+        String response = sendRequest("/fapi/v1/order", "POST", params);
+        return new JSONObject(response).getInt("orderId");
     }
 
-    public String setLeverage(int leverage) {
+    public void setLeverage(int leverage) {
         Map<String, String> params = new HashMap<>();
-        params.put("symbol", "DOGEUSDC");
+        params.put("symbol", SYMBOL.toUpperCase());
         params.put("leverage", String.valueOf(leverage));
 
-        return sendRequest("/fapi/v1/leverage", "POST", params);
+        sendRequest("/fapi/v1/leverage", "POST", params);
     }
 
     public int getLeverage() {
         Map<String, String> params = new HashMap<>();
-        params.put("symbol", "DOGEUSDC");
+        params.put("symbol", SYMBOL.toUpperCase());
+        params.put("recvWindow", "5000");
 
-        return sendRequest("/fapi/v1/leverage", "GET", params);
+        String response = sendRequest("/fapi/v2/positionRisk", "GET", params);
+        JSONArray jsonArray = new JSONArray(response);
+        if (jsonArray.isEmpty()) {
+            return -1;
+        } else {
+            return Integer.parseInt(jsonArray.getJSONObject(0).getString("leverage"));
+        }
     }
 
     public double getAccountBalance() {
-        String endpoint = "/fapi/v2/balance";
-        String method = "GET";
         Map<String, String> params = new HashMap<>();
         params.put("recvWindow", "5000");
 
         double result = 0.;
-        String response = sendRequest(endpoint, method, params);
-        Log.debug(response);
+        String response = sendRequest("/fapi/v2/balance", "GET", params);
         JSONArray jsonArray = new JSONArray(response);
         for (int i = 0; i < jsonArray.length(); i++) {
             JSONObject asset = jsonArray.getJSONObject(i);
@@ -78,10 +96,21 @@ public class RestAPIService {
         return result;
     }
 
+    public AccountInfo getAccountInfo() {
+        Map<String, String> params = new HashMap<>();
+        params.put("recvWindow", "5000");
+
+        String response = sendRequest("/fapi/v2/account", "GET", params);
+        JSONObject account = new JSONObject(response);
+        return new AccountInfo(account.getBoolean("canTrade"),
+                Double.parseDouble(account.getString("totalWalletBalance")));
+    }
+
     public String getOpenPositions() {
         Map<String, String> params = new HashMap<>();
         params.put("symbol", "DOGEUSDC");
         params.put("recvWindow", "5000");
+
         return sendRequest("/fapi/v1/openOrders", "GET", params);
     }
 
@@ -112,10 +141,9 @@ public class RestAPIService {
             }
         } catch (Exception e) {
             Log.debug(e);
+            return "";
         }
-        return null;
     }
-
 
     private String generateSignature(Map<String, String> params) throws Exception {
         String queryString = getParamsString(params);

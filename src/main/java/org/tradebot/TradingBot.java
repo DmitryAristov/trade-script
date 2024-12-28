@@ -4,12 +4,14 @@ import org.tradebot.binance.OrderBookHandler;
 import org.tradebot.binance.RestAPIService;
 import org.tradebot.binance.TradeHandler;
 import org.tradebot.binance.WebSocketService;
+import org.tradebot.domain.AccountInfo;
 import org.tradebot.service.*;
 
 public class TradingBot {
-    public static final int LEVERAGE = 5;
+    public static final int LEVERAGE = 6;
     public static final String SYMBOL = "BTCUSDC";
 
+    private final RestAPIService apiService = new RestAPIService();
     private ImbalanceService imbalanceService;
     private Strategy strategy;
     private VolatilityService volatilityService;
@@ -18,13 +20,17 @@ public class TradingBot {
     private OrderBookHandler orderBookHandler;
 
     public void start() {
-        RestAPIService apiService = new RestAPIService();
-        apiService.setLeverage(LEVERAGE);
-        double balance = apiService.getAccountBalance();
+        AccountInfo accountInfo = apiService.getAccountInfo();
+        if (!accountInfo.canTrade()) {
+            throw new RuntimeException("account cannot trade");
+        }
+
+        double balance = accountInfo.availableBalance();
         if (balance <= 0) {
             throw new RuntimeException("no available balance to trade");
         }
 
+        apiService.setLeverage(LEVERAGE);
         if (apiService.getLeverage() != LEVERAGE) {
             throw new RuntimeException("leverage is incorrect");
         }

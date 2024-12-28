@@ -1,141 +1,108 @@
 package org.tradebot.domain;
 
-import org.tradebot.enums.ExecutionType;
-import org.tradebot.enums.OrderType;
 import org.tradebot.util.TimeFormatter;
 
 import java.io.Serializable;
-import java.util.Arrays;
 
 public class Order implements Serializable {
+    public static final double LIMIT_ORDER_TRADE_FEE = 0.00002;
+    public static final double MARKET_ORDER_TRADE_FEE = 0.00005;
 
-    /**
-     * Тип ордера: вверх или вниз
-     */
-    private OrderType type;
+    public enum Side {
+        BUY,
+        SELL
+    }
 
-    /**
-     * Тип ордера: рыночный или лимитный. Рыночный исполняется прямо в момент создания,
-     * лимитный исполняется по цене исполнения (executionPrice)
-     */
-    private ExecutionType executionType;
-    private double executionPrice;
+    public enum Type {
+        MARKET,
+        LIMIT,
+        STOP,
+        TAKE_PROFIT,
+        STOP_MARKET,
+        TAKE_PROFIT_MARKET
+    }
 
-    /**
-     * Сумма денег ордера. Кредитное плечо уже учтено
-     */
-    private double moneyAmount;
+    private Side side;
+    private Double quantity;
     private Double price;
-    private boolean filled = false;
-    private boolean canceled = false;
-    private double[] takeProfitPrices = new double[]{};
-    private double stopLossPrice = -1;
     private long createTime;
-    private Imbalance imbalance;
+    private Type type;
+
+    private Double stopPrice;
+    private Boolean closePosition;
+    private Boolean reduceOnly;
 
     public Order() { }
 
-    /**
-     * Исполнить ордер
-     */
-    public void fill() {
-        this.filled = true;
+    public Side getSide() {
+        return side;
     }
 
-    /**
-     * Отменить ордер
-     */
-    public void cancel() {
-        this.canceled = true;
+    public void setSide(Side side) {
+        this.side = side;
     }
 
-    /**
-     * Проверяет если лимитный ордер можно исполнить.
-     * Возвращает ошибку если метод вызван на рыночном ордере.
-     */
-    public boolean isExecutable(MarketEntry currentEntry) {
-        if (this.executionType == ExecutionType.LIMIT) {
-            return switch (this.type) {
-                case LONG -> this.executionPrice >= currentEntry.low();
-                case SHORT -> this.executionPrice <= currentEntry.high();
-            };
-        } else {
-            throw new RuntimeException("Market order executes at create time. It cannot be executable or not.");
-        }
-    }
-
-    /**
-     * Устанавливает цены закрытия позиции
-     * @param stopLoss цена автоматического закрытия позиции в минус
-     * @param takeProfitPrices цена автоматического закрытия позиции в плюс
-     */
-    public void setTP_SL(double[] takeProfitPrices, double stopLoss) {
-        this.takeProfitPrices = takeProfitPrices;
-        this.stopLossPrice = stopLoss;
-    }
-
-    public OrderType getType() {
+    public Type getType() {
         return type;
     }
 
-    public ExecutionType getExecutionType() {
-        return executionType;
-    }
-
-    public boolean isFilled() {
-        return filled;
-    }
-
-    public boolean isCanceled() {
-        return canceled;
-    }
-
-    public double[] getTakeProfitPrices() {
-        return takeProfitPrices;
-    }
-
-    public double getStopLossPrice() {
-        return stopLossPrice;
-    }
-
-    public void setExecutionPrice(double executionPrice) {
-        this.executionPrice = executionPrice;
-    }
-
-    public void setCreateTime(long createTime) {
-        this.createTime = createTime;
-    }
-
-    public void setType(OrderType type) {
+    public void setType(Type type) {
         this.type = type;
-    }
-
-    public void setExecutionType(ExecutionType executionType) {
-        this.executionType = executionType;
-    }
-
-    public double getMoneyAmount() {
-        return moneyAmount;
-    }
-
-    public void setMoneyAmount(double moneyAmount) {
-        this.moneyAmount = moneyAmount;
-    }
-
-    public void setPrice(double price) {
-        this.price = price;
     }
 
     public Double getPrice() {
         return this.price;
     }
 
-    public void setImbalance(Imbalance imbalance) {
-        this.imbalance = imbalance;
+    public void setPrice(double price) {
+        this.price = price;
     }
 
-    public Imbalance getImbalance() {
-        return imbalance;
+    public Double getQuantity() {
+        return quantity;
+    }
+
+    public void setQuantity(double quantity) {
+        this.quantity = quantity;
+    }
+
+    public Double getStopPrice() {
+        return stopPrice;
+    }
+
+    public void setStopPrice(double stopPrice) {
+        this.stopPrice = stopPrice;
+    }
+
+    public long getCreateTime() {
+        return createTime;
+    }
+
+    public void setCreateTime(long createTime) {
+        this.createTime = createTime;
+    }
+
+    public double getTradeFee() {
+        return switch (type) {
+            case MARKET, STOP_MARKET, TAKE_PROFIT_MARKET -> MARKET_ORDER_TRADE_FEE;
+            case LIMIT, STOP, TAKE_PROFIT -> LIMIT_ORDER_TRADE_FEE;
+        };
+    }
+
+    public Boolean isClosePosition() {
+        return closePosition;
+    }
+
+    public void setClosePosition(boolean closePosition) {
+        this.closePosition = closePosition;
+    }
+
+    public Boolean isReduceOnly() {
+        return reduceOnly;
+    }
+
+    public void setReduceOnly(boolean reduceOnly) {
+        this.reduceOnly = reduceOnly;
     }
 
     @Override
@@ -143,13 +110,11 @@ public class Order implements Serializable {
         return String.format("""
                         Order
                            type :: %s
-                           moneyAmount :: %.2f$
-                           takeProfitPrice :: %s$
+                           quantity :: %.2f$
                            stopLossPrice :: %.2f$
                            createTime :: %s""",
-                type,
-                moneyAmount,
-                Arrays.toString(takeProfitPrices),
+                side,
+                quantity,
                 stopLossPrice,
                 TimeFormatter.format(createTime));
     }

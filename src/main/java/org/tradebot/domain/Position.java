@@ -1,17 +1,15 @@
 package org.tradebot.domain;
 
-import org.tradebot.util.Log;
 import org.tradebot.util.TimeFormatter;
 
 import java.io.Serializable;
 
-import static org.tradebot.api_service.BinanceAPIService.MARKET_ORDER_TRADE_FEE;
+import static org.tradebot.domain.Order.LIMIT_ORDER_TRADE_FEE;
 
 public class Position implements Serializable {
     private final Order order;
     private final double openPrice;
     private final long openTime;
-    private final double takeProfitPrice;
     private double stopLossPrice;
     private double closePrice;
     private long closeTime;
@@ -19,7 +17,7 @@ public class Position implements Serializable {
      * Размер позиции в биткоинах (BTC) с уже учтенным кредитным плечом
      * 32500$ / цену открытия (10000$) = количество BTC которое покупаем (3.25BTC)
      */
-    private final double amountInBTC;
+    private final double quantity;
     /**
      * 32500$ * 0.001 = 32.5$ - комиссия за открытие сделки (с учетом плеча)
      */
@@ -39,12 +37,10 @@ public class Position implements Serializable {
         this.order = order;
         this.openPrice = currentEntry.average();
         this.openTime = openTime;
-        this.amountInBTC = order.getMoneyAmount() / openPrice;
-        this.takeProfitPrice = order.getTakeProfitPrices();
+        this.quantity = order.getQuantity();
         this.stopLossPrice = order.getStopLossPrice();
-        this.openFee = order.getMoneyAmount() * MARKET_ORDER_TRADE_FEE;
-        this.closeFee = order.getMoneyAmount() * MARKET_ORDER_TRADE_FEE;
-        Log.debug("created: " + this);
+        this.openFee = order.getQuantity() * order.getPrice() * order.getTradeFee();
+        this.closeFee = order.getQuantity() * order.getPrice() * order.getTradeFee();
     }
 
     /**
@@ -54,20 +50,17 @@ public class Position implements Serializable {
         this.closePrice = closePrice;
         this.closeTime = closeTime;
         this.isOpen = false;
-        this.closeFee = amountInBTC * closePrice * MARKET_ORDER_TRADE_FEE;
-        Log.debug("closed: " + this);
+        this.closeFee = quantity * closePrice * order.getTradeFee();
     }
 
     /**
      * Посчитать прибыль/убыток без учета комиссии. Уже включено кредитное плечо
      */
     public double getProfitLoss() {
-        double profitLoss = switch (order.getType()) {
-            case LONG -> (closePrice - openPrice) * amountInBTC;
-            case SHORT -> (openPrice - closePrice) * amountInBTC;
+        return switch (order.getSide()) {
+            case BUY -> (closePrice - openPrice) * quantity;
+            case SELL -> (openPrice - closePrice) * quantity;
         };
-        Log.debug(String.format("profitLoss :: %.2f$", profitLoss));
-        return profitLoss;
     }
 
     /**
@@ -75,7 +68,7 @@ public class Position implements Serializable {
      */
     public void setClosePrice(double closePrice) {
         this.closePrice = closePrice;
-        this.closeFee = amountInBTC * closePrice * MARKET_ORDER_TRADE_FEE;
+        this.closeFee = quantity * closePrice * LIMIT_ORDER_TRADE_FEE;
     }
 
     /**
@@ -84,10 +77,10 @@ public class Position implements Serializable {
      * @return true если позиция в без-убытке
      */
     public boolean isZeroLoss() {
-        double feesMoneyAmount = (this.openFee + this.closeFee) / this.amountInBTC;
-        return switch (this.getOrder().getType()) {
-            case LONG -> this.stopLossPrice >= this.openPrice + feesMoneyAmount;
-            case SHORT -> this.stopLossPrice <= this.openPrice - feesMoneyAmount;
+        double feesMoneyAmount = (this.openFee + this.closeFee) / this.quantity;
+        return switch (this.getOrder().getSide()) {
+            case BUY -> this.stopLossPrice >= this.openPrice + feesMoneyAmount;
+            case SELL -> this.stopLossPrice <= this.openPrice - feesMoneyAmount;
         };
     }
 
@@ -101,19 +94,15 @@ public class Position implements Serializable {
      *   цена закрытия X $ > цена открытия 10000 $ + 50 $ / (0.5 BTC * кредитное плечо (5))
      */
     public void setZeroLoss() {
-        double feesMoneyAmount = (this.openFee + this.closeFee) / this.amountInBTC;
-        switch (this.order.getType()) {
-            case LONG -> this.stopLossPrice = this.openPrice + feesMoneyAmount;
-            case SHORT -> this.stopLossPrice = this.openPrice - feesMoneyAmount;
+        double feesMoneyAmount = (this.openFee + this.closeFee) / this.quantity;
+        switch (this.order.getSide()) {
+            case BUY -> this.stopLossPrice = this.openPrice + feesMoneyAmount;
+            case SELL -> this.stopLossPrice = this.openPrice - feesMoneyAmount;
         }
     }
 
     public boolean isOpen() {
         return isOpen;
-    }
-
-    public double getTakeProfitPrice() {
-        return takeProfitPrice;
     }
 
     public double getStopLossPrice() {
@@ -158,15 +147,13 @@ public class Position implements Serializable {
                            openFee :: %.2f$
                            closePrice :: %.2f$
                            closeFee :: %.2f$
-                           takeProfitPrice :: %.2f$
                            stopLossPrice :: %.2f$""",
-                amountInBTC,
+                quantity,
                 TimeFormatter.format(openTime),
                 openPrice,
                 openFee,
                 closePrice,
                 closeFee,
-                takeProfitPrice,
                 stopLossPrice);
     }
 }

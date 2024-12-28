@@ -3,41 +3,24 @@ package org.tradebot;
 
 import org.tradebot.binance.RestAPIService;
 import org.tradebot.domain.*;
-import org.tradebot.enums.ExecutionType;
-import org.tradebot.enums.ImbalanceState;
-import org.tradebot.enums.OrderType;
 import org.tradebot.listener.ImbalanceStateListener;
+import org.tradebot.listener.MarketDataListener;
 import org.tradebot.listener.OrderBookListener;
 import org.tradebot.service.ImbalanceService;
 import org.tradebot.util.Log;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * Класс описывающий стратегию открытия и закрытия сделок на основе технического анализа
- */
-public class Strategy implements OrderBookListener, ImbalanceStateListener {
-    /**
-     * Текущее состояние программы.
-     * Lifecycle:
-     *   1. ждет имбаланс
-     *   2. имбаланс появился, ищет точку входа
-     *   3. точка входа найдена, открывает позицию(и)
-     *   4. ожидает закрытия позиции(й)
-     */
+import static org.tradebot.TradingBot.LEVERAGE;
+
+public class Strategy implements OrderBookListener, ImbalanceStateListener, MarketDataListener {
+
     public enum State {
-        WAIT_IMBALANCE,
         ENTRY_POINT_SEARCH,
-        POSITIONS_OPENED,
-        WAIT_POSITIONS_CLOSED
+        WAIT_POSITION_CLOSED
     }
 
-    /**
-     * Части от размера имбаланса для первого и второго тейка в случае если закрытие одной позиции происходит по частям.
-     *  Пример: имбаланс был 55000$ -> 59000$. Тогда его размер = 4000$.
-     *          При SHORT сделке первый тейк будет выставлен на 59000 - 4000 * 0.4 = 57400$.
-     */
-    private static final int TAKES_COUNT = 2;
     private static final double[] TAKE_PROFIT_THRESHOLDS = new double[]{0.35, 0.75};
     private static final double STOP_LOSS_MODIFICATOR = 0.01;
     private static final long POSITION_LIVE_TIME = 240 * 60_000L;
@@ -45,21 +28,18 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener {
     private final ImbalanceService imbalanceService;
 
     private final RestAPIService apiService;
-    public State state = State.WAIT_IMBALANCE;
+    public State state;
 
-    private Map<Double, Double> bids = new TreeMap<>();
-    private Map<Double, Double> asks = new TreeMap<>();
-
+    private Map<Double, Double> bids = new ConcurrentHashMap<>();
+    private Map<Double, Double> asks = new ConcurrentHashMap<>();
+    double availableBalance;
 
     public Strategy(ImbalanceService imbalanceService,
                     RestAPIService apiService) {
         this.imbalanceService = imbalanceService;
         this.apiService = apiService;
 
-        //noinspection ConstantValue
-        if (TAKES_COUNT > TAKE_PROFIT_THRESHOLDS.length) {
-            throw new RuntimeException("foreach take modifier must be defined");
-        }
+        availableBalance = apiService.getAccountBalance();
 
         Log.info(String.format("""
                         strategy parameters:
@@ -67,123 +47,104 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener {
                             takes modifiers :: %s
                             stop modificator :: %.2f
                             position live time :: %d minutes""",
-                TAKES_COUNT,
+                TAKE_PROFIT_THRESHOLDS.length,
                 Arrays.toString(TAKE_PROFIT_THRESHOLDS),
                 STOP_LOSS_MODIFICATOR,
                 POSITION_LIVE_TIME/60_000L));
     }
 
     @Override
-    public void notify(long currentTime, ImbalanceState imbalanceState) {
+    public void notify(long timestamp, MarketEntry marketEntry) {
         switch (state) {
-            case WAIT_IMBALANCE -> {
-                /*
-                 * Is imbalance present?
-                 *    yes - change state to ENTRY_POINT_SEARCH
-                 *    no - { return without state change }
-                 */
-                if (imbalanceState == ImbalanceState.PROGRESS) {
-                    state = State.ENTRY_POINT_SEARCH;
-                }
-            }
             case ENTRY_POINT_SEARCH -> {
-                /*
-                 * Is imbalance completed?
-                 *    yes - change state to POSSIBLE_ENTRY_POINT
-                 *    no - { return without state change }
-                 */
-                if (imbalanceState == ImbalanceState.POTENTIAL_END_POINT) {
-                    if (openPositions(currentTime, currentEntry)) {
-                        state = State.POSITIONS_OPENED;
-                    } else {
-                        state = State.WAIT_IMBALANCE;
-                    }
-                }
+
             }
-            case POSITIONS_OPENED -> {
-                /*
-                 * Wait for the price moving to stop loss or take profit.
-                 * Control opened position.
-                 * Position is closed?
-                 *    yes - change state to IMBALANCE_IN_PROGRESS
-                 *    no - { return without state change }
-                 */
-                Position position = apiService.getOpenPosition();
-                closeByTimeout(currentTime, currentEntry, position);
-
-                //TODO rewrite using one position partially closed instead of several positions
-                position = apiService.getOpenPosition();
+            case WAIT_POSITION_CLOSED -> {
+                // update stop when position partially closed
 
 
-                if (TAKES_COUNT == 1) {
-                    state = State.WAIT_POSITIONS_CLOSED;
-                } else {
-                    if (positions.isEmpty()) {
-                        // все закрылось в убыток -> снова ждем имбаланс
-                        state = State.WAIT_IMBALANCE;
-                    } else if (positions.size() == TAKES_COUNT - 1) {
-                        // взят первый тейк -> ставим всем остальным без-убыток
-                        positions.forEach(position -> {
-                            if (position.getProfitLoss() > (position.getOpenFee() + position.getCloseFee()) * 2.) {
-                                position.setZeroLoss();
-                                state = State.WAIT_POSITIONS_CLOSED;
-                            }
-                        });
-                    }
-                }
+                // when closed -> update balance for the next trade
+                availableBalance = apiService.getAccountBalance();
             }
-            case WAIT_POSITIONS_CLOSED -> {
-                List<Position> positions = apiService.getOpenPositions();
-                closeByTimeout(currentTime, currentEntry, positions);
+        }
+    }
 
-                positions = apiService.getOpenPositions();
-                if (positions.isEmpty()) {
-                    state = State.WAIT_IMBALANCE;
+    @Override
+    public void notify(long currentTime, ImbalanceService.State imbalanceState, Imbalance currentImbalance) {
+        switch (imbalanceState) {
+            case PROGRESS -> state = State.ENTRY_POINT_SEARCH;
+            case POTENTIAL_END_POINT -> {
+                if (state == State.ENTRY_POINT_SEARCH) {
+                    openPosition(currentTime);
                 }
             }
         }
     }
 
-    private boolean openPositions(long currentTime, MarketEntry currentEntry) {
-        if (!apiService.getOpenPositions().isEmpty()) {
-            throw new RuntimeException("Trying to open position while already opened " + apiService.getOpenPositions().size());
-        }
+    private void openPosition(long currentTime) {
+
+        // leave current thread and start this part async
 
 
-        Imbalance imbalance = imbalanceService.getCurrentImbalance();
+        boolean placeAdditionalMarketOrder = false;
+        Imbalance imbalance = imbalanceService.getImbalance();
         double imbalanceSize = imbalance.size();
-        Log.debug("imbalance when open position :: " + imbalance);
-
         Order order = new Order();
-        order.setImbalance(imbalance);
-
-        order.setExecutionType(ExecutionType.LIMIT);
-
-        // partially take profit and stop loss
+        double availableQuantity = 0., price = 0;
         double stopLossPrice = imbalance.getEndPrice();
-        double[] takeProfitPrices = new double[TAKES_COUNT];
-        for (int i = 0; i < TAKES_COUNT; i++) {
+        double[] takeProfitPrices = new double[TAKE_PROFIT_THRESHOLDS.length];
+        for (int i = 0; i < TAKE_PROFIT_THRESHOLDS.length; i++) {
             switch (imbalance.getType()) {
                 case UP -> {
-                    order.setType(OrderType.SHORT);
+                    order.setSide(Order.Side.SELL);
                     takeProfitPrices[i] = imbalance.getEndPrice() - TAKE_PROFIT_THRESHOLDS[i] * imbalanceSize;
                     stopLossPrice += imbalanceSize * STOP_LOSS_MODIFICATOR;
+                    price = asks.keySet().stream().min(Double::compare).orElse(0.0);
+                    availableQuantity = asks.get(price);
                 }
                 case DOWN -> {
-                    order.setType(OrderType.LONG);
+                    order.setSide(Order.Side.BUY);
                     takeProfitPrices[i] = imbalance.getEndPrice() + TAKE_PROFIT_THRESHOLDS[i] * imbalanceSize;
                     stopLossPrice -= imbalanceSize * STOP_LOSS_MODIFICATOR;
+                    price = bids.keySet().stream().max(Double::compare).orElse(0.0);
+                    availableQuantity = bids.get(price);
                 }
             }
-
         }
-        order.setTP_SL(takeProfitPrices, stopLossPrice);
+        order.setPrice(price);
+        if (order.getPrice() == 0) {
+            Log.debug("asks: " + asks.toString());
+            Log.debug("bids: " + bids.toString());
+            Log.debug("imbalance" + imbalance);
+            Log.debug(new RuntimeException("price is not set"));
+        }
+        double quantity = availableBalance * LEVERAGE / price * 0.99;
+        if (quantity > availableQuantity) {
+            order.setQuantity(availableQuantity);
+            placeAdditionalMarketOrder = true;
+        } else {
+            order.setQuantity(quantity);
+        }
 
         order.setCreateTime(currentTime);
-        order.setMoneyAmount(calculatePositionSize());
-        String orderId = apiService.createLimitOrder(order);
+        order.setType(Order.Type.LIMIT);
+        int orderId = apiService.placeOrder(order);
 
-        return true;
+
+
+        if (placeAdditionalMarketOrder) {
+
+        }
+
+
+
+        // Проверить открылась позиция или нет.
+        // Если не открылась или недоокрылась, то переоткрывать по текущей цене если позволяет имбаланс сервис.
+        Position position = new Position();
+
+        // create take profit orders
+
+
     }
 
     private void closeByTimeout(long currentTime, MarketEntry currentEntry, Position position) {
@@ -193,13 +154,9 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener {
         }
     }
 
-    public double calculatePositionSize() {
-        return apiService.getAccountBalance();
-    }
-
     @Override
     public void notify(Map<Double, Double> asks, Map<Double, Double> bids) {
-        this.asks = new TreeMap<>(asks);
-        this.bids = new TreeMap<>(bids).descendingMap();
+        this.asks = asks;
+        this.bids = bids;
     }
 }

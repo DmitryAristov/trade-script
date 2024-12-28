@@ -2,7 +2,6 @@ package org.tradebot.binance;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
-import org.tradebot.Strategy;
 import org.tradebot.listener.OrderBookListener;
 import org.tradebot.util.Log;
 
@@ -29,14 +28,6 @@ public class OrderBookHandler {
     private long orderBookLastUpdateId = -1;
     private boolean isOrderBookInitialized = false;
     private boolean firstOrderBookMessageReceived;
-
-    public void start() {
-        //TODO
-    }
-
-    public void stop() {
-        //TODO
-    }
 
     public void onMessage(JSONObject message) {
         try {

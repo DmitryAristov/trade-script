@@ -46,6 +46,7 @@ public class TradeHandler {
 
     private void calculateMarketData() {
         try {
+            //TODO how can we move to binance time?
             long openTime = System.currentTimeMillis();
             Deque<JSONObject> tempQueue;
             synchronized (activeQueue) {

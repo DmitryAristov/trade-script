@@ -1,8 +1,9 @@
 package org.tradebot.listener;
 
-import org.tradebot.enums.ImbalanceState;
+import org.tradebot.domain.Imbalance;
+import org.tradebot.service.ImbalanceService;
 
 public interface ImbalanceStateListener {
 
-    void notify(long time, ImbalanceState state);
+    void notify(long time, ImbalanceService.State state, Imbalance currentImbalance);
 }
