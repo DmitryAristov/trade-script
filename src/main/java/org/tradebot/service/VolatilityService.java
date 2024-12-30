@@ -8,21 +8,19 @@ import org.tradebot.util.Log;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.TreeMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public class VolatilityService {
 
-    /**
-     * Период обновления волатильности и средней цены (1000мс * 60с * 60м * 24ч = 1 день)
-     */
-    private static final long UPDATE_TIME_PERIOD_MILLS = 24L * 60L * 60L * 1000L;
-    private static final long INTERVAL = 15;
-    private static final long VOLATILITY_CALCULATE_PAST_TIME = 24 * 60 / INTERVAL;
-    private static final long AVERAGE_PRICE_CALCULATE_PAST_TIME = 1;
-
+    private static final long UPDATE_TIME_PERIOD_HOURS = 12;
+    private static final int VOLATILITY_CALCULATE_PAST_TIME = 1;
+    private static final int AVERAGE_PRICE_CALCULATE_PAST_TIME = 1;
 
     private final RestAPIService apiService;
     private final List<VolatilityListener> listeners = new ArrayList<>();
-    private long lastUpdateTime = -1L;
+    private ScheduledExecutorService volatilityUpdateScheduler;
 
     public VolatilityService(RestAPIService apiService) {
         Log.info(String.format("""
@@ -30,27 +28,38 @@ public class VolatilityService {
                             update time period :: %d hours
                             volatility calculation past time :: %d days
                             average price calculation past time :: %d days""",
-                UPDATE_TIME_PERIOD_MILLS / 3_600_000L,
+                UPDATE_TIME_PERIOD_HOURS,
                 VOLATILITY_CALCULATE_PAST_TIME,
                 AVERAGE_PRICE_CALCULATE_PAST_TIME));
         this.apiService = apiService;
     }
 
-    public void onTick(long currentTime, MarketEntry currentEntry) {
-        if (currentTime - lastUpdateTime > UPDATE_TIME_PERIOD_MILLS) {
-            double volatility = calculateVolatility(currentTime);
-            double average = calculateAverage(currentTime);
-            Log.debug(String.format("volatility=%.2f%% || average=%.2f$", volatility * 100, average), currentTime);
-            listeners.forEach(listener -> listener.notifyVolatilityUpdate(volatility, average));
-            lastUpdateTime = currentTime;
+    public void start() {
+        if (volatilityUpdateScheduler == null || volatilityUpdateScheduler.isShutdown()) {
+            volatilityUpdateScheduler = Executors.newScheduledThreadPool(1);
         }
+        volatilityUpdateScheduler.scheduleAtFixedRate(this::updateParams, 0, UPDATE_TIME_PERIOD_HOURS, TimeUnit.HOURS);
+        Log.info("service started");
     }
 
-    /**
-     * Метод определяет волатильность актива
-     */
-    private double calculateVolatility(long currentTime) {
-        TreeMap<Long, MarketEntry> marketData = apiService.getMarketData(INTERVAL, VOLATILITY_CALCULATE_PAST_TIME);
+    private void updateParams() {
+        Log.info("update volatility parameters");
+        double volatility = calculateVolatility();
+        double average = calculateAverage();
+        Log.info(String.format("volatility=%.2f, average=%.2f", volatility, average));
+        listeners.forEach(listener -> listener.notifyVolatilityUpdate(volatility, average));
+    }
+
+    public void stop() {
+        if (volatilityUpdateScheduler != null && !volatilityUpdateScheduler.isShutdown()) {
+            volatilityUpdateScheduler.shutdownNow();
+            volatilityUpdateScheduler = null;
+        }
+        Log.info("service stopped");
+    }
+
+    private double calculateVolatility() {
+        TreeMap<Long, MarketEntry> marketData = apiService.getMarketDataPublicAPI("15m", VOLATILITY_CALCULATE_PAST_TIME * 24 * 60 / 15);
 
         if (marketData.size() < 2) {
             return 0.;
@@ -65,11 +74,8 @@ public class VolatilityService {
         return changes.stream().reduce(0., Double::sum) / changes.size();
     }
 
-    /**
-     * Метод определяет среднюю цену актива
-     */
-    private double calculateAverage(long currentTime) {
-        TreeMap<Long, MarketEntry> marketData = apiService.getMarketData(INTERVAL, AVERAGE_PRICE_CALCULATE_PAST_TIME);
+    private double calculateAverage() {
+        TreeMap<Long, MarketEntry> marketData = apiService.getMarketDataPublicAPI("15m", AVERAGE_PRICE_CALCULATE_PAST_TIME * 24 * 60 / 15);
 
         if (marketData.size() < 2) {
             return 0.;
@@ -87,10 +93,12 @@ public class VolatilityService {
     public void subscribe(VolatilityListener listener) {
         if (!listeners.contains(listener)) {
             listeners.add(listener);
+            Log.info(String.format("listener added %s", listener.getClass().getName()));
         }
     }
 
     public void unsubscribe(VolatilityListener listener) {
         listeners.remove(listener);
+        Log.info(String.format("listener removed %s", listener.getClass().getName()));
     }
 }

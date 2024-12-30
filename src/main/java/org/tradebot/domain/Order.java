@@ -2,9 +2,7 @@ package org.tradebot.domain;
 
 import org.tradebot.util.TimeFormatter;
 
-import java.io.Serializable;
-
-public class Order implements Serializable {
+public class Order {
 
     public enum Side {
         BUY,
@@ -18,10 +16,10 @@ public class Order implements Serializable {
     }
 
     private Side side;
-    private Double quantity;
-    private Double price;
-    private long createTime;
     private Type type;
+    private Double price;
+    private Double quantity;
+    private long createTime;
 
     private Double stopPrice;
     private Boolean closePosition;
@@ -106,11 +104,19 @@ public class Order implements Serializable {
                            type :: %s
                            price :: %.2f
                            quantity :: %.2f$
+                           stopPrice :: %.2f$
+                           closePosition :: %s$
+                           reduceOnly :: %s$
+                           newClientOrderId :: %s$
                            createTime :: %s""",
                 side,
                 type,
                 price,
                 quantity,
+                stopPrice,
+                closePosition,
+                reduceOnly,
+                newClientOrderId,
                 TimeFormatter.format(createTime));
     }
 }

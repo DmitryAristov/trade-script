@@ -39,12 +39,15 @@ public class WebSocketService extends WebSocketClient {
         pingWSConnectionTaskScheduler.scheduleAtFixedRate(() -> {
             if (this.isOpen()) {
                 this.sendPing();
+                Log.info("ping");
             }
         }, 5, 5, TimeUnit.MINUTES);
+        Log.info("service created");
     }
 
     @Override
     public void onOpen(ServerHandshake handshake) {
+        Log.info("service started");
         send(String.format("{\"method\": \"SUBSCRIBE\", \"params\": [\"%s@trade\"], \"id\": 1}", SYMBOL.toLowerCase()));
         send(String.format("{\"method\": \"SUBSCRIBE\", \"params\": [\"%s@depth@100ms\"], \"id\": 2}", SYMBOL.toLowerCase()));
     }
@@ -67,8 +70,9 @@ public class WebSocketService extends WebSocketClient {
                 tradeHandler.start();
             } else if (id == 2 && "null".equals(message.get("result").toString())) {
 //                orderBookHandler.start();
+                Log.info("orderBookHandler started");
             } else if (id == 3 && "null".equals(message.get("result").toString())) {
-                userDataStream = true;
+//                userDataStream = true;
             }
         }
     }
@@ -80,7 +84,7 @@ public class WebSocketService extends WebSocketClient {
 
     @Override
     public void onError(Exception e) {
-        Log.debug(e);
+        Log.error(e);
     }
 
     public void unsubscribe() {
@@ -94,22 +98,25 @@ public class WebSocketService extends WebSocketClient {
             pingWSConnectionTaskScheduler.shutdownNow();
             pingWSConnectionTaskScheduler = null;
         }
+        Log.info("service stopped");
     }
 
     public void closeUserDataStream() {
         if (userDataStream) {
+            userDataStream = false;
             send(String.format("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"%s\"], \"id\": 3}", listenKey));
             if (pingUserDataStreamScheduler != null && !pingUserDataStreamScheduler.isShutdown()) {
                 pingUserDataStreamScheduler.shutdownNow();
                 pingUserDataStreamScheduler = null;
             }
             apiService.removeUserStreamKey();
-            userDataStream = false;
+            Log.info("user data stream stopped");
         }
     }
 
     public void openUserDataStream() {
         if (!userDataStream) {
+            userDataStream = true;
             listenKey = apiService.getUserStreamKey();
             send(String.format("{\"method\": \"SUBSCRIBE\", \"params\": [\"%s\"], \"id\": 3}", listenKey));
 
@@ -121,6 +128,7 @@ public class WebSocketService extends WebSocketClient {
                     apiService.keepAliveUserStreamKey();
                 }
             }, 59, 59, TimeUnit.MINUTES);
+            Log.info("user data stream started");
         }
     }
 }

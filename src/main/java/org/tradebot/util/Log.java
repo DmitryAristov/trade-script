@@ -10,6 +10,7 @@ import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicLong;
 
 
+
 public class Log {
 
     public static final Log.Level LOG_LEVEL = Level.DEBUG;
@@ -17,7 +18,8 @@ public class Log {
 
     public enum Level {
         DEBUG,
-        INFO
+        INFO,
+        ERROR
     }
 
     public static final long PROGRESS_LOG_STEP = 15_000L;
@@ -27,21 +29,21 @@ public class Log {
         log(message, Level.DEBUG);
     }
 
-    public static void debug(Exception exception) {
-        debug(exception, true);
-    }
-
-    public static void debug(Exception exception, boolean rethrow) {
+    public static RuntimeException error(Exception exception) {
         log("exception got: " +
                         exception.getMessage() +
                         Arrays.stream(exception.getStackTrace())
                                 .map(StackTraceElement::toString)
                                 .reduce("", (s1, s2) -> s1 + "\n    at " + s2),
-                Level.DEBUG);
-        if (rethrow) {
-            throw new RuntimeException(exception);
-        }
+                Level.ERROR);
+        return new RuntimeException(exception);
     }
+
+    public static RuntimeException error(String message) {
+        log("error got: " + message, Level.ERROR);
+        return new RuntimeException(message);
+    }
+
 
     public static void info(String message) {
         log(message, Level.INFO);
@@ -66,10 +68,6 @@ public class Log {
         if (mills != -1) {
             logEntry += " on " + TimeFormatter.format(mills);
         }
-
-        if ((level == Level.DEBUG && LOG_LEVEL == Level.DEBUG) || level == Level.INFO) {
-            System.out.println(logEntry);
-        }
         writeLogFile(logEntry);
     }
 
@@ -78,7 +76,7 @@ public class Log {
             writer.write(logEntry);
             writer.newLine();
         } catch (IOException e) {
-            Log.debug(e);
+            throw Log.error(e);
         }
     }
 

@@ -28,6 +28,7 @@ public class TradeHandler {
             marketDataScheduler = Executors.newScheduledThreadPool(1);
         }
         marketDataScheduler.scheduleAtFixedRate(this::calculateMarketData, 1000 - System.currentTimeMillis() % 1000, 100, TimeUnit.MILLISECONDS);
+        Log.info("service started");
     }
 
     public void stop() {
@@ -35,6 +36,7 @@ public class TradeHandler {
             marketDataScheduler.shutdownNow();
             marketDataScheduler = null;
         }
+        Log.info("service stopped");
     }
 
     public void onMessage(JSONObject message) {
@@ -78,7 +80,7 @@ public class TradeHandler {
 
             listeners.forEach(listener -> listener.notifyNewMarketEntry(openTime, entry));
         } catch (Exception e) {
-            Log.debug(e);
+            throw Log.error(e);
         }
     }
 
@@ -98,10 +100,12 @@ public class TradeHandler {
     public void subscribe(MarketDataListener listener) {
         if (!listeners.contains(listener)) {
             listeners.add(listener);
+            Log.info(String.format("listener added %s", listener.getClass().getName()));
         }
     }
 
     public void unsubscribe(MarketDataListener listener) {
         listeners.remove(listener);
+        Log.info(String.format("listener removed %s", listener.getClass().getName()));
     }
 }

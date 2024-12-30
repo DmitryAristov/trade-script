@@ -2,7 +2,9 @@ package org.tradebot.binance;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.tradebot.domain.OrderBook;
 import org.tradebot.listener.OrderBookListener;
+import org.tradebot.util.Log;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -25,6 +27,7 @@ public class OrderBookHandler {
 
     public OrderBookHandler(RestAPIService apiService) {
         this.apiService = apiService;
+        Log.info("service created");
     }
 
     public void onMessage(JSONObject message) {
@@ -38,6 +41,7 @@ public class OrderBookHandler {
             if (message.getLong("U") <= orderBookLastUpdateId && updateId >= orderBookLastUpdateId) {
                 updateOrderBook(message, updateId);
                 firstOrderBookMessageReceived = true;
+                Log.info("first order book message");
             }
             return;
         }
@@ -55,18 +59,18 @@ public class OrderBookHandler {
             return;
         }
 
-        String response = apiService.getOrderBookPublicAPI();
-        if ("429".equals(response)) {
+        OrderBook orderBook = apiService.getOrderBookPublicAPI();
+        if (orderBook.lastUpdateId() == 429L) {
             isOrderBookInitialized = false;
             depthEndpointLockTimeMills = System.currentTimeMillis();
             return;
         }
 
-        JSONObject snapshot = new JSONObject(response);
-        orderBookLastUpdateId = snapshot.getLong("lastUpdateId");
-
-        parseOrderBook(snapshot.getJSONArray("asks"), asks);
-        parseOrderBook(snapshot.getJSONArray("bids"), bids);
+        orderBookLastUpdateId = orderBook.lastUpdateId();
+        asks.clear();
+        asks.putAll(orderBook.asks());
+        bids.clear();
+        bids.putAll(orderBook.bids());
 
         depthEndpointLockTimeMills = -1;
         isOrderBookInitialized = true;
@@ -97,23 +101,15 @@ public class OrderBookHandler {
         }
     }
 
-    private void parseOrderBook(JSONArray orders, Map<Double, Double> orderBook) {
-        orderBook.clear();
-        for (int i = 0; i < orders.length(); i++) {
-            JSONArray order = orders.getJSONArray(i);
-            double price = order.getDouble(0);
-            double quantity = order.getDouble(1);
-            orderBook.put(price, quantity);
-        }
-    }
-
     public void subscribe(OrderBookListener listener) {
         if (!listeners.contains(listener)) {
             listeners.add(listener);
+            Log.info(String.format("listener added %s", listener.getClass().getName()));
         }
     }
 
     public void unsubscribe(OrderBookListener listener) {
         listeners.remove(listener);
+        Log.info(String.format("listener removed %s", listener.getClass().getName()));
     }
 }

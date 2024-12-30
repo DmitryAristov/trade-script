@@ -357,8 +357,6 @@ public class ImbalanceService implements VolatilityListener, MarketDataListener 
     public void notifyVolatilityUpdate(double volatility, double average) {
         this.priceChangeThreshold = average * PRICE_MODIFICATOR;
         this.speedThreshold = average * SPEED_MODIFICATOR;
-
-        Log.debug(String.format("new price change %.2f$ || speed %.2f$/minute", priceChangeThreshold, speedThreshold * 60_000L));
     }
 
     private void saveCompletedImbalanceAndResetState() {
@@ -376,10 +374,12 @@ public class ImbalanceService implements VolatilityListener, MarketDataListener 
     public void subscribe(ImbalanceStateListener listener) {
         if (!listeners.contains(listener)) {
             listeners.add(listener);
+            Log.info(String.format("listener added %s", listener.getClass().getName()));
         }
     }
 
     public void unsubscribe(ImbalanceStateListener listener) {
         listeners.remove(listener);
+        Log.info(String.format("listener removed %s", listener.getClass().getName()));
     }
 }

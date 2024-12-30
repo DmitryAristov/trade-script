@@ -8,10 +8,11 @@ import org.tradebot.binance.TradeHandler;
 import org.tradebot.domain.AccountInfo;
 import org.tradebot.service.ImbalanceService;
 import org.tradebot.service.VolatilityService;
+import org.tradebot.util.Log;
 
 public class TradingBot {
     public static final int LEVERAGE = 6;
-    public static final String SYMBOL = "BTCUSDC";
+    public static final String SYMBOL = "BTCUSDT";
 
     private final RestAPIService apiService = new RestAPIService();
     private ImbalanceService imbalanceService;
@@ -25,47 +26,49 @@ public class TradingBot {
     public void start() {
         AccountInfo accountInfo = apiService.getAccountInfo();
         if (!accountInfo.canTrade()) {
-            throw new RuntimeException("account cannot trade");
+            throw Log.error("account cannot trade");
         }
 
         double balance = accountInfo.availableBalance();
         if (balance <= 0) {
-            throw new RuntimeException("no available balance to trade");
+            throw Log.error("no available balance to trade");
         }
 
         apiService.setLeverage(LEVERAGE);
         if (apiService.getLeverage() != LEVERAGE) {
-            throw new RuntimeException("leverage is incorrect");
+            throw Log.error("leverage is incorrect");
         }
 
-        this.imbalanceService = new ImbalanceService();
-        this.strategy = new Strategy(apiService, webSocketService);
-        this.imbalanceService.subscribe(strategy);
+        imbalanceService = new ImbalanceService();
+        strategy = new Strategy(apiService, webSocketService);
+        imbalanceService.subscribe(strategy);
 
-        this.volatilityService = new VolatilityService(apiService);
-        this.volatilityService.subscribe(imbalanceService);
+        volatilityService = new VolatilityService(apiService);
+        volatilityService.subscribe(imbalanceService);
+        volatilityService.start();
 
-        this.tradeHandler = new TradeHandler();
-        this.tradeHandler.subscribe(imbalanceService);
+        tradeHandler = new TradeHandler();
+        tradeHandler.subscribe(imbalanceService);
 
-        this.orderBookHandler = new OrderBookHandler(apiService);
-        this.orderBookHandler.subscribe(strategy);
+        orderBookHandler = new OrderBookHandler(apiService);
+        orderBookHandler.subscribe(strategy);
 
-        this.userDataStreamHandler = new UserDataHandler();
-        this.userDataStreamHandler.subscribe(strategy);
+        userDataStreamHandler = new UserDataHandler();
+        userDataStreamHandler.subscribe(strategy);
 
 
-        this.webSocketService = new WebSocketService(tradeHandler, orderBookHandler, userDataStreamHandler, apiService);
+        webSocketService = new WebSocketService(tradeHandler, orderBookHandler, userDataStreamHandler, apiService);
         webSocketService.connect();
     }
 
     public void stop() {
-        this.imbalanceService.unsubscribe(strategy);
-        this.volatilityService.unsubscribe(imbalanceService);
-        this.tradeHandler.unsubscribe(imbalanceService);
-        this.orderBookHandler.unsubscribe(strategy);
-        this.userDataStreamHandler.unsubscribe(strategy);
-        this.webSocketService.unsubscribe();
-        this.webSocketService.close();
+        imbalanceService.unsubscribe(strategy);
+        volatilityService.unsubscribe(imbalanceService);
+        volatilityService.stop();
+        tradeHandler.unsubscribe(imbalanceService);
+        orderBookHandler.unsubscribe(strategy);
+        userDataStreamHandler.unsubscribe(strategy);
+        webSocketService.unsubscribe();
+        webSocketService.close();
     }
 }

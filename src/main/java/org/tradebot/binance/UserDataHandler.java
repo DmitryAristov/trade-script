@@ -2,6 +2,7 @@ package org.tradebot.binance;
 
 import org.json.JSONObject;
 import org.tradebot.listener.UserDataListener;
+import org.tradebot.util.Log;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -23,10 +24,12 @@ public class UserDataHandler {
     public void subscribe(UserDataListener listener) {
         if (!listeners.contains(listener)) {
             listeners.add(listener);
+            Log.info(String.format("listener added %s", listener.getClass().getName()));
         }
     }
 
     public void unsubscribe(UserDataListener listener) {
         listeners.remove(listener);
+        Log.info(String.format("listener removed %s", listener.getClass().getName()));
     }
 }

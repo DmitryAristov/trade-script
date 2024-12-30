@@ -60,6 +60,7 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
                 Arrays.toString(TAKE_PROFIT_THRESHOLDS),
                 STOP_LOSS_MODIFICATOR,
                 POSITION_LIVE_TIME));
+        Log.info("service created");
     }
 
     @Override
@@ -100,6 +101,7 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
         createTakeAndStopOrders(imbalance, quantity);
 
         orders.put("position_open_order", order);
+        Log.info(String.format("order created: %s", order));
         apiService.placeOrder(order);
     }
 
@@ -117,6 +119,7 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
                     String clientId = String.format("take_%d", i + 1);
                     order.setNewClientOrderId(clientId);
                     orders.put(clientId, order);
+                    Log.info(String.format("order created: %s", order));
                 }
                 Order order = new Order();
                 order.setSide(Order.Side.BUY);
@@ -125,6 +128,7 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
                 order.setClosePosition(true);
                 order.setNewClientOrderId("stop");
                 orders.put("stop", order);
+                Log.info(String.format("order created: %s", order));
             }
             case DOWN -> {
                 for (int i = 0; i < TAKE_PROFIT_THRESHOLDS.length; i++) {
@@ -137,6 +141,7 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
                     String clientId = String.format("take_%d", i + 1);
                     order.setNewClientOrderId(clientId);
                     orders.put(clientId, order);
+                    Log.info(String.format("order created: %s", order));
                 }
                 Order order = new Order();
                 order.setSide(Order.Side.SELL);
@@ -145,6 +150,7 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
                 order.setClosePosition(true);
                 order.setNewClientOrderId("stop");
                 orders.put("stop", order);
+                Log.info(String.format("order created: %s", order));
             }
         }
     }
@@ -157,10 +163,10 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
 
     @Override
     public void notifyOrderUpdate(String clientId, String status) {
+        Log.info(String.format("new status %s of order %s", clientId, status));
         if ("FILLED".equals(status)) {
             if ("position_open_order".equals(clientId)) {
                 orders.remove("position_open_order");
-
                 apiService.placeOrders(orders.values());
 
                 if (closePositionTimer == null || closePositionTimer.isShutdown()) {
@@ -173,28 +179,21 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
             }
             if ("take_1".equals(clientId)) {
                 orders.remove("take_1");
-
                 placeBreakEvenStop();
                 return;
             }
             if ("take_2".equals(clientId)) {
                 orders.remove("take_2");
-
-                availableBalance = apiService.getAccountBalance();
-                state = State.ENTRY_POINT_SEARCH;
+                reinitState();
                 return;
             }
             if ("stop".equals(clientId)) {
                 orders.remove("stop");
-
-                availableBalance = apiService.getAccountBalance();
-                state = State.ENTRY_POINT_SEARCH;
+                reinitState();
                 return;
             }
             if ("timeout_stop".equals(clientId)) {
-
-                availableBalance = apiService.getAccountBalance();
-                state = State.ENTRY_POINT_SEARCH;
+                reinitState();
 
                 if (closePositionTimer != null && !closePositionTimer.isShutdown()) {
                     closePositionTimer.shutdownNow();
@@ -204,11 +203,17 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
         }
     }
 
+    private void reinitState() {
+        availableBalance = apiService.getAccountBalance();
+        webSocketService.closeUserDataStream();
+        state = State.ENTRY_POINT_SEARCH;
+        Log.info("position closed, reset state to initial");
+    }
+
     private void closePositionByTimeout() {
         Position position = apiService.getOpenPosition();
         if (position == null) {
-            // error
-            return;
+            throw Log.error("trying to close position by timeout while position is null");
         }
 
         Order order = new Order();
@@ -219,14 +224,14 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
             case SHORT -> order.setSide(Order.Side.BUY);
             case LONG -> order.setSide(Order.Side.SELL);
         }
+        Log.info(String.format("order created: %s", order));
         apiService.placeOrder(order);
     }
 
     private void placeBreakEvenStop() {
         Position position = apiService.getOpenPosition();
         if (position == null) {
-            // error
-            return;
+            throw Log.error("trying to place break even stop order while position is null");
         }
 
         orders.remove("stop");
@@ -239,6 +244,7 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
                 order.setStopPrice(position.getEntryPrice());
                 order.setClosePosition(true);
                 orders.put("stop", order);
+                Log.info(String.format("order created: %s", order));
             }
             case LONG -> {
                 Order order = new Order();
@@ -247,7 +253,9 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
                 order.setStopPrice(position.getEntryPrice());
                 order.setClosePosition(true);
                 orders.put("stop", order);
+                Log.info(String.format("order created: %s", order));
             }
         }
+        apiService.placeOrder(orders.get("stop"));
     }
 }
