@@ -1,5 +1,7 @@
 package org.tradebot;
 
+import org.tradebot.service.TradingBot;
+
 import java.time.Duration;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -8,7 +10,7 @@ import java.util.concurrent.TimeUnit;
 public class Main {
 
     public static void main(String[] args) {
-        TradingBot bot = new TradingBot();
+        TradingBot bot = new TradingBot("BTCUSDT", 6);
         bot.start();
 
         ScheduledExecutorService dailyRerunTaskScheduler = Executors.newScheduledThreadPool(1);

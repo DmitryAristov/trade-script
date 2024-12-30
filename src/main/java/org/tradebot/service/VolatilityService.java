@@ -20,9 +20,10 @@ public class VolatilityService {
 
     private final RestAPIService apiService;
     private final List<VolatilityListener> listeners = new ArrayList<>();
+    private final String symbol;
     private ScheduledExecutorService volatilityUpdateScheduler;
 
-    public VolatilityService(RestAPIService apiService) {
+    public VolatilityService(String symbol, RestAPIService apiService) {
         Log.info(String.format("""
                         imbalance parameters:
                             update time period :: %d hours
@@ -31,6 +32,7 @@ public class VolatilityService {
                 UPDATE_TIME_PERIOD_HOURS,
                 VOLATILITY_CALCULATE_PAST_TIME,
                 AVERAGE_PRICE_CALCULATE_PAST_TIME));
+        this.symbol = symbol;
         this.apiService = apiService;
     }
 
@@ -43,7 +45,6 @@ public class VolatilityService {
     }
 
     private void updateParams() {
-        Log.info("update volatility parameters");
         double volatility = calculateVolatility();
         double average = calculateAverage();
         Log.info(String.format("volatility=%.2f, average=%.2f", volatility, average));
@@ -59,7 +60,7 @@ public class VolatilityService {
     }
 
     private double calculateVolatility() {
-        TreeMap<Long, MarketEntry> marketData = apiService.getMarketDataPublicAPI("15m", VOLATILITY_CALCULATE_PAST_TIME * 24 * 60 / 15);
+        TreeMap<Long, MarketEntry> marketData = apiService.getMarketDataPublicAPI(symbol, "15m", VOLATILITY_CALCULATE_PAST_TIME * 24 * 60 / 15);
 
         if (marketData.size() < 2) {
             return 0.;
@@ -75,7 +76,7 @@ public class VolatilityService {
     }
 
     private double calculateAverage() {
-        TreeMap<Long, MarketEntry> marketData = apiService.getMarketDataPublicAPI("15m", AVERAGE_PRICE_CALCULATE_PAST_TIME * 24 * 60 / 15);
+        TreeMap<Long, MarketEntry> marketData = apiService.getMarketDataPublicAPI(symbol, "15m", AVERAGE_PRICE_CALCULATE_PAST_TIME * 24 * 60 / 15);
 
         if (marketData.size() < 2) {
             return 0.;
@@ -100,5 +101,12 @@ public class VolatilityService {
     public void unsubscribe(VolatilityListener listener) {
         listeners.remove(listener);
         Log.info(String.format("listener removed %s", listener.getClass().getName()));
+    }
+
+    public void logAll() {
+        Log.debug(String.format("symbol: %s", symbol));
+        Log.debug(String.format("listeners: %s", listeners));
+        Log.debug(String.format("volatilityUpdateScheduler isShutdown: %s", volatilityUpdateScheduler.isShutdown()));
+        Log.debug(String.format("volatilityUpdateScheduler isTerminated: %s", volatilityUpdateScheduler.isTerminated()));
     }
 }

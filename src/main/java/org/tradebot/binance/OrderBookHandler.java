@@ -13,19 +13,21 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class OrderBookHandler {
     public static final long DEPTH_UNLOCK_WAIT_TIME_MILLS = 50_000L;
-    private final List<OrderBookListener> listeners = new ArrayList<>();
+    protected final List<OrderBookListener> listeners = new ArrayList<>();
+    private final String symbol;
 
-    private final Map<Double, Double> bids = new ConcurrentHashMap<>();
-    private final Map<Double, Double> asks = new ConcurrentHashMap<>();
+    protected final Map<Double, Double> bids = new ConcurrentHashMap<>();
+    protected final Map<Double, Double> asks = new ConcurrentHashMap<>();
 
     private final RestAPIService apiService;
 
     private long depthEndpointLockTimeMills = -1;
-    private long orderBookLastUpdateId = -1;
-    private boolean isOrderBookInitialized = false;
-    private boolean firstOrderBookMessageReceived;
+    protected long orderBookLastUpdateId = -1;
+    protected boolean isOrderBookInitialized = false;
+    protected boolean firstOrderBookMessageReceived;
 
-    public OrderBookHandler(RestAPIService apiService) {
+    public OrderBookHandler(String symbol, RestAPIService apiService) {
+        this.symbol = symbol;
         this.apiService = apiService;
         Log.info("service created");
     }
@@ -41,7 +43,7 @@ public class OrderBookHandler {
             if (message.getLong("U") <= orderBookLastUpdateId && updateId >= orderBookLastUpdateId) {
                 updateOrderBook(message, updateId);
                 firstOrderBookMessageReceived = true;
-                Log.info("first order book message");
+                Log.info("first order book message received");
             }
             return;
         }
@@ -59,7 +61,7 @@ public class OrderBookHandler {
             return;
         }
 
-        OrderBook orderBook = apiService.getOrderBookPublicAPI();
+        OrderBook orderBook = apiService.getOrderBookPublicAPI(symbol);
         if (orderBook.lastUpdateId() == 429L) {
             isOrderBookInitialized = false;
             depthEndpointLockTimeMills = System.currentTimeMillis();
@@ -111,5 +113,16 @@ public class OrderBookHandler {
     public void unsubscribe(OrderBookListener listener) {
         listeners.remove(listener);
         Log.info(String.format("listener removed %s", listener.getClass().getName()));
+    }
+
+    public void logAll() {
+        Log.debug(String.format("symbol: %s", symbol));
+        Log.debug(String.format("listeners: %s", listeners));
+        Log.debug(String.format("bids: %s", bids));
+        Log.debug(String.format("asks: %s", asks));
+        Log.debug(String.format("depthEndpointLockTimeMills: %d", depthEndpointLockTimeMills));
+        Log.debug(String.format("orderBookLastUpdateId: %s", orderBookLastUpdateId));
+        Log.debug(String.format("isOrderBookInitialized: %s", isOrderBookInitialized));
+        Log.debug(String.format("firstOrderBookMessageReceived: %s", firstOrderBookMessageReceived));
     }
 }

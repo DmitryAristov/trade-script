@@ -19,6 +19,10 @@ public class Position {
         this.entryPrice = entryPrice;
     }
 
+    public double getPositionAmt() {
+        return positionAmt;
+    }
+
     public void setPositionAmt(double positionAmt) {
         this.positionAmt = positionAmt;
     }
@@ -37,7 +41,7 @@ public class Position {
     public String toString() {
         return String.format("""
                         Order
-                           entryPrice :: %.2f
+                           entryPrice :: %.2f$
                            positionAmt :: %.2f""",
                 entryPrice,
                 positionAmt);

@@ -8,9 +8,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class UserDataHandler {
-    private final List<UserDataListener> listeners = new ArrayList<>();
+    protected final List<UserDataListener> listeners = new ArrayList<>();
 
     public void onMessage(String eventType, JSONObject message) {
+        Log.debug("user data stream message: " + message.toString());
         if ("ORDER_TRADE_UPDATE".equals(eventType)) {
             JSONObject orderJson = message.getJSONObject("o");
             String status = orderJson.getString("X");
@@ -31,5 +32,9 @@ public class UserDataHandler {
     public void unsubscribe(UserDataListener listener) {
         listeners.remove(listener);
         Log.info(String.format("listener removed %s", listener.getClass().getName()));
+    }
+
+    public void logAll() {
+        Log.debug(String.format("listeners: %s", listeners));
     }
 }

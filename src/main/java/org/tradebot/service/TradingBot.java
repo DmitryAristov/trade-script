@@ -1,0 +1,102 @@
+package org.tradebot.service;
+
+import org.tradebot.binance.RestAPIService;
+import org.tradebot.binance.OrderBookHandler;
+import org.tradebot.binance.UserDataHandler;
+import org.tradebot.binance.WebSocketService;
+import org.tradebot.binance.HttpClientService;
+import org.tradebot.binance.TradeHandler;
+import org.tradebot.domain.AccountInfo;
+import org.tradebot.domain.Precision;
+import org.tradebot.util.Log;
+
+public class TradingBot {
+
+    public final int leverage;
+    public final String symbol;
+    public static Precision precision;
+    private static TradingBot instance;
+
+    public TradingBot(String symbol, int leverage) {
+        instance = this;
+        this.symbol = symbol;
+        this.leverage = leverage;
+        Log.info(String.format("%s bot created with leverage %d", symbol, leverage));
+        precision = apiService.fetchSymbolPrecision(symbol);
+        Log.info(String.format("precision: %s", precision));
+    }
+
+    protected final HttpClientService httpClient = new HttpClientService();
+    protected final RestAPIService apiService = new RestAPIService(httpClient);
+    protected ImbalanceService imbalanceService;
+    protected Strategy strategy;
+    protected VolatilityService volatilityService;
+    protected WebSocketService webSocketService;
+    protected TradeHandler tradeHandler;
+    protected OrderBookHandler orderBookHandler;
+    protected UserDataHandler userDataStreamHandler;
+
+    public void start() {
+        AccountInfo accountInfo = apiService.getAccountInfo();
+        if (!accountInfo.canTrade()) {
+            throw Log.error("account cannot trade");
+        }
+
+        double balance = accountInfo.availableBalance();
+        if (balance <= 0) {
+            throw Log.error("no available balance to trade");
+        }
+
+        apiService.setLeverage(symbol, leverage);
+        if (apiService.getLeverage(symbol) != leverage) {
+            throw Log.error("leverage is incorrect");
+        }
+
+        imbalanceService = new ImbalanceService();
+        tradeHandler = new TradeHandler();
+        userDataStreamHandler = new UserDataHandler();
+        orderBookHandler = new OrderBookHandler(symbol, apiService);
+        webSocketService = new WebSocketService(symbol, tradeHandler, orderBookHandler, userDataStreamHandler, apiService);
+        volatilityService = new VolatilityService(symbol, apiService);
+        strategy = new Strategy(symbol, leverage, apiService, webSocketService);
+
+        imbalanceService.subscribe(strategy);
+        tradeHandler.subscribe(imbalanceService);
+        volatilityService.subscribe(imbalanceService);
+        orderBookHandler.subscribe(strategy);
+        userDataStreamHandler.subscribe(strategy);
+        volatilityService.start();
+        webSocketService.connect();
+        Log.info("bot started");
+    }
+
+    public void stop() {
+        imbalanceService.unsubscribe(strategy);
+        volatilityService.unsubscribe(imbalanceService);
+        volatilityService.stop();
+        tradeHandler.unsubscribe(imbalanceService);
+        orderBookHandler.unsubscribe(strategy);
+        userDataStreamHandler.unsubscribe(strategy);
+        strategy.stopClosePositionTimer();
+        webSocketService.unsubscribe();
+        webSocketService.close();
+        Log.info("bot stopped");
+    }
+
+    public static void logAll() {
+        instance.imbalanceService.logAll();
+        instance.volatilityService.logAll();
+        instance.tradeHandler.logAll();
+        instance.orderBookHandler.logAll();
+        instance.userDataStreamHandler.logAll();
+        instance.strategy.logAll();
+        instance.webSocketService.logAll();
+    }
+
+    public static void main(String[] args) throws InterruptedException {
+        TradingBot bot = new TradingBot("DOGEUSDT", 6);
+        bot.start();
+        Thread.sleep(60000L);
+        bot.stop();
+    }
+}

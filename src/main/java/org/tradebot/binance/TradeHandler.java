@@ -16,12 +16,12 @@ import java.util.concurrent.TimeUnit;
 public class TradeHandler {
 
     private static final int MAX_TRADE_QUEUE_SIZE = 100000;
-    private final List<MarketDataListener> listeners = new ArrayList<>();
+    protected final List<MarketDataListener> listeners = new ArrayList<>();
 
-    private ScheduledExecutorService marketDataScheduler;
-    private Deque<JSONObject> activeQueue = new ArrayDeque<>(MAX_TRADE_QUEUE_SIZE);
-    private Deque<JSONObject> processingQueue = new ArrayDeque<>(MAX_TRADE_QUEUE_SIZE);
-    private Double lastPrice = null;
+    protected ScheduledExecutorService marketDataScheduler;
+    protected Deque<JSONObject> activeQueue = new ArrayDeque<>(MAX_TRADE_QUEUE_SIZE);
+    protected Deque<JSONObject> processingQueue = new ArrayDeque<>(MAX_TRADE_QUEUE_SIZE);
+    protected Double lastPrice = null;
 
     public void start() {
         if (marketDataScheduler == null || marketDataScheduler.isShutdown()) {
@@ -35,8 +35,8 @@ public class TradeHandler {
         if (marketDataScheduler != null && !marketDataScheduler.isShutdown()) {
             marketDataScheduler.shutdownNow();
             marketDataScheduler = null;
+            Log.info("service stopped");
         }
-        Log.info("service stopped");
     }
 
     public void onMessage(JSONObject message) {
@@ -48,7 +48,7 @@ public class TradeHandler {
         }
     }
 
-    private void calculateMarketData() {
+    protected void calculateMarketData() {
         try {
             //TODO how can we move to binance time?
             long openTime = System.currentTimeMillis();
@@ -84,7 +84,7 @@ public class TradeHandler {
         }
     }
 
-    private MarketEntry processEntry(double minPrice, double maxPrice, double volume) {
+    protected MarketEntry processEntry(double minPrice, double maxPrice, double volume) {
         MarketEntry entry = null;
         if (minPrice == Double.MAX_VALUE || maxPrice == Double.MIN_VALUE) {
             if (lastPrice != null) {
@@ -107,5 +107,14 @@ public class TradeHandler {
     public void unsubscribe(MarketDataListener listener) {
         listeners.remove(listener);
         Log.info(String.format("listener removed %s", listener.getClass().getName()));
+    }
+
+    public void logAll() {
+        Log.debug(String.format("listeners: %s", listeners));
+        Log.debug(String.format("activeQueue: %s", activeQueue));
+        Log.debug(String.format("processingQueue: %s", processingQueue));
+        Log.debug(String.format("lastPrice: %s", lastPrice));
+        Log.debug(String.format("marketDataScheduler isShutdown: %s", marketDataScheduler.isShutdown()));
+        Log.debug(String.format("marketDataScheduler isTerminated: %s", marketDataScheduler.isTerminated()));
     }
 }

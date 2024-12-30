@@ -2,36 +2,40 @@ package org.tradebot.binance;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
-import org.tradebot.domain.*;
+import org.tradebot.domain.AccountInfo;
+import org.tradebot.domain.HttpResponse;
+import org.tradebot.domain.MarketEntry;
+import org.tradebot.domain.Order;
+import org.tradebot.domain.OrderBook;
+import org.tradebot.domain.Position;
+import org.tradebot.domain.Precision;
 import org.tradebot.util.Log;
 
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URI;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.math.BigDecimal;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
-
-import static org.tradebot.TradingBot.SYMBOL;
 
 public class RestAPIService {
-
-    private static final String API_KEY = "****";
-    private static final String API_SECRET = "****";
     private static final String BASE_URL = "https://fapi.binance.com";
+    private final HttpClientService httpClient;
+
+    public RestAPIService(HttpClientService httpClient) {
+        this.httpClient = httpClient;
+    }
 
     public void placeOrder(Order order) {
         Map<String, String> params = new HashMap<>();
 
         // mandatory params
-        params.put("symbol", SYMBOL.toUpperCase());
+        params.put("symbol", order.getSymbol());
         params.put("side", order.getSide().toString());
         params.put("type", order.getType().toString());
+        if (order.getType() == Order.Type.LIMIT && order.getTimeInForce() == null) {
+            throw Log.error("timeInForce required for LIMIT order");
+        }
 
         // optional params
         if (order.getPrice() != null) {
@@ -52,28 +56,31 @@ public class RestAPIService {
         if (order.getNewClientOrderId() != null) {
             params.put("newClientOrderId", String.valueOf(order.getNewClientOrderId()));
         }
+        if (order.getTimeInForce() != null) {
+            params.put("timeInForce", String.valueOf(order.getTimeInForce()));
+        }
 
-        sendRequest("/fapi/v1/order", "POST", params);
+        httpClient.sendRequest("/fapi/v1/order", "POST", params);
     }
 
     public void placeOrders(Collection<Order> orders) {
         orders.forEach(this::placeOrder);
     }
 
-    public void setLeverage(int leverage) {
+    public void setLeverage(String symbol, int leverage) {
         Map<String, String> params = new HashMap<>();
-        params.put("symbol", SYMBOL.toUpperCase());
+        params.put("symbol", symbol);
         params.put("leverage", String.valueOf(leverage));
 
-        sendRequest("/fapi/v1/leverage", "POST", params);
+        httpClient.sendRequest("/fapi/v1/leverage", "POST", params);
     }
 
-    public int getLeverage() {
+    public int getLeverage(String symbol) {
         Map<String, String> params = new HashMap<>();
-        params.put("symbol", SYMBOL.toUpperCase());
+        params.put("symbol", symbol);
         params.put("recvWindow", "5000");
 
-        String response = sendRequest("/fapi/v2/positionRisk", "GET", params);
+        String response = httpClient.sendRequest("/fapi/v2/positionRisk", "GET", params);
         JSONArray jsonArray = new JSONArray(response);
         if (jsonArray.isEmpty()) {
             return -1;
@@ -87,7 +94,7 @@ public class RestAPIService {
         params.put("recvWindow", "5000");
 
         double result = 0.;
-        String response = sendRequest("/fapi/v2/balance", "GET", params);
+        String response = httpClient.sendRequest("/fapi/v2/balance", "GET", params);
         JSONArray jsonArray = new JSONArray(response);
         for (int i = 0; i < jsonArray.length(); i++) {
             JSONObject asset = jsonArray.getJSONObject(i);
@@ -102,20 +109,19 @@ public class RestAPIService {
     public AccountInfo getAccountInfo() {
         Map<String, String> params = new HashMap<>();
         params.put("recvWindow", "5000");
-        params.put("recvWindow", "5000");
 
-        String response = sendRequest("/fapi/v2/account", "GET", params);
+        String response = httpClient.sendRequest("/fapi/v2/account", "GET", params);
         JSONObject account = new JSONObject(response);
         return new AccountInfo(account.getBoolean("canTrade"),
                 Double.parseDouble(account.getString("totalWalletBalance")));
     }
 
-    public Position getOpenPosition() {
+    public Position getOpenPosition(String symbol) {
         Map<String, String> params = new HashMap<>();
-        params.put("symbol", SYMBOL.toUpperCase());
+        params.put("symbol", symbol);
         params.put("recvWindow", "5000");
 
-        String response = sendRequest("/fapi/v3/positionRisk", "GET", params);
+        String response = httpClient.sendRequest("/fapi/v3/positionRisk", "GET", params);
         JSONArray jsonArray = new JSONArray(response);
         if (jsonArray.isEmpty()) {
             return null;
@@ -136,117 +142,38 @@ public class RestAPIService {
     public String getUserStreamKey() {
         Map<String, String> params = new HashMap<>();
         params.put("timestamp", String.valueOf(System.currentTimeMillis()));
-        String response = sendRequest("/fapi/v1/listenKey", "POST", params);
+        String response = httpClient.sendRequest("/fapi/v1/listenKey", "POST", params);
         return new JSONObject(response).getString("listenKey");
     }
 
     public void keepAliveUserStreamKey() {
         Map<String, String> params = new HashMap<>();
         params.put("timestamp", String.valueOf(System.currentTimeMillis()));
-        sendRequest("/fapi/v1/listenKey", "PUT", params);
+        httpClient.sendRequest("/fapi/v1/listenKey", "PUT", params);
     }
 
     public void removeUserStreamKey() {
         Map<String, String> params = new HashMap<>();
         params.put("timestamp", String.valueOf(System.currentTimeMillis()));
-        sendRequest("/fapi/v1/listenKey", "DELETE", params);
+        httpClient.sendRequest("/fapi/v1/listenKey", "DELETE", params);
     }
 
-    private String sendRequest(String endpoint, String method, Map<String, String> params) {
-        Log.debug(String.format("send %s request to %s with params %s", method, endpoint, params.toString()));
-        try {
-            params.put("timestamp", String.valueOf(System.currentTimeMillis()));
-            String signature = generateSignature(params);
-            params.put("signature", signature);
+    public OrderBook getOrderBookPublicAPI(String symbol) {
+        HttpResponse response = httpClient
+                .sendPublicRequest(String.format("%s/fapi/v1/depth?symbol=%s&limit=%d", BASE_URL, symbol, 50), true);
 
-            URL url = new URI(BASE_URL + endpoint + "?" + getParamsString(params)).toURL();
-
-            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-            connection.setRequestMethod(method);
-            connection.setRequestProperty("X-MBX-APIKEY", API_KEY);
-            connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
-
-            Map<String, List<String>> headers = connection.getHeaderFields();
-            Log.debug(String.format("headers %s", headers.toString()));
-
-            int responseCode = connection.getResponseCode();
-            if (responseCode >= 200 && responseCode < 300) {
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
-
-                    String response = reader.lines().collect(Collectors.joining());
-                    Log.debug(String.format("response code %d, body %s", responseCode, response));
-                    return response;
-                }
-            } else {
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getErrorStream()))) {
-                    String errorResponse = reader.lines().collect(Collectors.joining());
-                    throw Log.error(String.format("http error %d, message %s", responseCode, errorResponse));
-                }
-            }
-        } catch (Exception e) {
-            throw Log.error(e);
+        if (response.statusCode() == 429) {
+            Log.error("429 got : HTTP rate limit exceed");
+            return new OrderBook(429L, null, null);
         }
-    }
-
-    private String generateSignature(Map<String, String> params) throws Exception {
-        String queryString = getParamsString(params);
-        Mac mac = Mac.getInstance("HmacSHA256");
-        SecretKeySpec secretKeySpec = new SecretKeySpec(API_SECRET.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
-        mac.init(secretKeySpec);
-        byte[] hash = mac.doFinal(queryString.getBytes(StandardCharsets.UTF_8));
-        StringBuilder hexString = new StringBuilder();
-        for (byte b : hash) {
-            String hex = Integer.toHexString(0xff & b);
-            if (hex.length() == 1) hexString.append('0');
-            hexString.append(hex);
+        if (response.statusCode() >= 300) {
+            throw Log.error(response.toString());
         }
-        return hexString.toString();
-    }
 
-    private String getParamsString(Map<String, String> params) {
-        return params.entrySet().stream()
-                .sorted(Map.Entry.comparingByKey())
-                .map(entry -> entry.getKey() + "=" + entry.getValue())
-                .collect(Collectors.joining("&"));
-    }
-
-    public OrderBook getOrderBookPublicAPI() {
-        Log.debug("GET order book");
-        try {
-            URL url = new URI(String.format("%s/fapi/v1/depth?symbol=%s&limit=%d",
-                    BASE_URL,
-                    SYMBOL.toUpperCase(),
-                    50)).toURL();
-            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-            connection.setRequestMethod("GET");
-
-            Map<String, List<String>> headers = connection.getHeaderFields();
-            Log.debug(String.format("headers %s", headers.toString()));
-
-            int responseCode = connection.getResponseCode();
-            if (responseCode >= 200 && responseCode < 300) {
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
-                    String response = reader.lines().collect(Collectors.joining());
-                    Log.debug(String.format("response code %d, body %s", responseCode, response));
-
-                    JSONObject snapshot = new JSONObject(response);
-                    Map<Double, Double> asks = parseOrderBook(snapshot.getJSONArray("asks"));
-                    Map<Double, Double> bids = parseOrderBook(snapshot.getJSONArray("bids"));
-                    return new OrderBook(snapshot.getLong("lastUpdateId"), asks, bids);
-                }
-            } else {
-                if (responseCode == 429) {
-                    Log.debug("429 got : HTTP rate limit exceed");
-                    return new OrderBook(429L, null, null);
-                }
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getErrorStream()))) {
-                    String errorResponse = reader.lines().collect(Collectors.joining());
-                    throw Log.error(String.format("http error %d, message %s", responseCode, errorResponse));
-                }
-            }
-        } catch (Exception e) {
-            throw Log.error(e);
-        }
+        JSONObject snapshot = new JSONObject(response.body());
+        Map<Double, Double> asks = parseOrderBook(snapshot.getJSONArray("asks"));
+        Map<Double, Double> bids = parseOrderBook(snapshot.getJSONArray("bids"));
+        return new OrderBook(snapshot.getLong("lastUpdateId"), asks, bids);
     }
 
     private Map<Double, Double> parseOrderBook(JSONArray orders) {
@@ -260,38 +187,11 @@ public class RestAPIService {
         return result;
     }
 
-    public TreeMap<Long, MarketEntry> getMarketDataPublicAPI(String interval, int limit) {
-        Log.debug("GET market data");
-        try {
-            URL url = URI.create(String.format("%s/fapi/v1/klines?symbol=%s&limit=%d&interval=%s",
-                    BASE_URL,
-                    SYMBOL.toUpperCase(),
-                    limit,
-                    interval)).toURL();
+    public TreeMap<Long, MarketEntry> getMarketDataPublicAPI(String symbol, String interval, int limit) {
+        HttpResponse response = httpClient
+                .sendPublicRequest(String.format("%s/fapi/v1/klines?symbol=%s&limit=%d&interval=%s", BASE_URL, symbol, limit, interval));
 
-            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-            connection.setRequestMethod("GET");
-
-            Map<String, List<String>> headers = connection.getHeaderFields();
-            Log.debug(String.format("headers %s", headers.toString()));
-
-            int responseCode = connection.getResponseCode();
-            if (responseCode >= 200 && responseCode < 300) {
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
-
-                    String response = reader.lines().collect(Collectors.joining());
-                    Log.debug(String.format("response code %d, body %s", responseCode, response));
-                    return parseResponseMarketData(response);
-                }
-            } else {
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getErrorStream()))) {
-                    String errorResponse = reader.lines().collect(Collectors.joining());
-                    throw Log.error(String.format("http error %d, message %s", responseCode, errorResponse));
-                }
-            }
-        } catch (Exception e) {
-            throw Log.error(e);
-        }
+        return parseResponseMarketData(response.body());
     }
 
     private TreeMap<Long, MarketEntry> parseResponseMarketData(String response) {
@@ -307,5 +207,40 @@ public class RestAPIService {
             marketData.put(candle.getLong(0), entry);
         }
         return marketData;
+    }
+
+    public Precision fetchSymbolPrecision(String symbol) {
+        HttpResponse response = httpClient
+                .sendPublicRequest(String.format("%s/fapi/v1/exchangeInfo", BASE_URL));
+
+        JSONObject json = new JSONObject(response.body());
+        JSONArray symbols = json.getJSONArray("symbols");
+        for (int i = 0; i < symbols.length(); i++) {
+            JSONObject symbolInfo = symbols.getJSONObject(i);
+            if (symbolInfo.getString("symbol").equals(symbol.toUpperCase())) {
+                JSONArray filters = symbolInfo.getJSONArray("filters");
+                int quantityPrecision = 0;
+                int pricePrecision = 0;
+                for (int j = 0; j < filters.length(); j++) {
+                    JSONObject filter = filters.getJSONObject(j);
+                    if ("LOT_SIZE".equals(filter.getString("filterType"))) {
+                        double stepSize = filter.getDouble("stepSize");
+                        quantityPrecision = getPrecision(stepSize);
+                    }
+                    if ("PRICE_FILTER".equals(filter.getString("filterType"))) {
+                        double tickSize = filter.getDouble("tickSize");
+                        pricePrecision = getPrecision(tickSize);
+                    }
+                }
+                return new Precision(quantityPrecision, pricePrecision);
+            }
+        }
+        throw Log.error("precision not found");
+    }
+
+    private int getPrecision(double value) {
+        String text = BigDecimal.valueOf(value).stripTrailingZeros().toPlainString();
+        int index = text.indexOf('.');
+        return (index < 0) ? 0 : text.length() - index - 1;
     }
 }

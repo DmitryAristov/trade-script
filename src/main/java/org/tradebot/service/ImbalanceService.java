@@ -23,6 +23,7 @@ public class ImbalanceService implements VolatilityListener, MarketDataListener 
         POTENTIAL_END_POINT,
         COMPLETED
     }
+
     /**
      * Время хранения ежесекундных данных (1000мс * 60с * 5м = 5 минут).
      * Отдельная коллекция для поиска окончания размером 120 секунд.
@@ -44,7 +45,7 @@ public class ImbalanceService implements VolatilityListener, MarketDataListener 
     public static final double SPEED_MODIFICATOR = 1E-7, PRICE_MODIFICATOR = 0.02;
 
     public static final double MAX_VALID_IMBALANCE_PART = 0.15;
-    public static final int MIN_IMBALANCE_TIME_DURATION = 10;
+    public static final long MIN_IMBALANCE_TIME_DURATION = 10_000L;
     public static final long TIME_CHECK_CONTR_IMBALANCE = 60 * 60_000L;
     public static final long MIN_POTENTIAL_COMPLETE_TIME = 2_000L;
     public static final long MIN_COMPLETE_TIME = 60_000L;
@@ -56,11 +57,11 @@ public class ImbalanceService implements VolatilityListener, MarketDataListener 
      * Пересчитывается каждый день на основе волатильности и средней цены.
      * Изменение цены в $, скорость изменения в $/миллисекунду
      */
-    private double priceChangeThreshold, speedThreshold;
+    protected double priceChangeThreshold, speedThreshold;
 
 
-    private State currentState = State.WAIT;
-    private Imbalance currentImbalance = null;
+    protected State currentState = State.WAIT;
+    protected Imbalance currentImbalance = null;
 
 
     private final TreeMap<Long, MarketEntry> seconds = new TreeMap<>();
@@ -198,15 +199,17 @@ public class ImbalanceService implements VolatilityListener, MarketDataListener 
 
         imbalances.add(imbalance);
         double maxImbalanceSize = imbalances.stream().max(Comparator.comparing(Imbalance::size)).get().size();
+        Log.info(String.format("filtering from %d imbalances with a largest size: %.2f", imbalances.size(), maxImbalanceSize));
         currentImbalance = imbalances.stream()
                 .filter(imbalance_ -> imbalance_.size() >= maxImbalanceSize * 0.75)
                 .max(Comparator.comparing(Imbalance::speed))
                 .orElseThrow();
 
+        Log.info(String.format("found imbalance: %s. let's check is it valid?", currentImbalance));
         if (isValid(currentImbalance)) {
             currentState = State.PROGRESS;
             listeners.forEach(listener -> listener.notifyImbalanceStateUpdate(currentTime, currentState, currentImbalance));
-            Log.debug(currentImbalance.getType() + " started: " + currentImbalance, seconds.lastKey());
+            Log.info(currentImbalance.getType() + " started: " + currentImbalance, seconds.lastKey());
         } else {
             currentImbalance = null;
         }
@@ -220,21 +223,26 @@ public class ImbalanceService implements VolatilityListener, MarketDataListener 
      * @return true если валидный имбаланс
      */
     private boolean isValid(Imbalance imbalance) {
+        boolean localExtremaBetweenStartEndPricesExists = seconds.subMap(imbalance.getStartTime(), imbalance.getEndTime()).entrySet().stream()
+                .anyMatch(entry -> switch (imbalance.getType()) {
+                    case UP -> entry.getValue().high() > imbalance.getEndPrice();
+                    case DOWN -> entry.getValue().low() < imbalance.getEndPrice();
+                });
+        Log.info(String.format("is there is local price extrema between start and end of imbalance? %s", localExtremaBetweenStartEndPricesExists));
+        boolean contrImbalanceExists = largeData.entrySet().stream()
+                .filter(entry -> entry.getKey() <= imbalance.getStartTime() &&
+                        entry.getKey() >= imbalance.getStartTime() - TIME_CHECK_CONTR_IMBALANCE)
+                .anyMatch(entry -> switch (imbalance.getType()) {
+                    case UP -> entry.getValue().high() > imbalance.getEndPrice() - imbalance.size() * 0.25;
+                    case DOWN -> entry.getValue().low() < imbalance.getEndPrice() + imbalance.size() * 0.25;
+                });
+        Log.info(String.format("is it a local price extrema between start and end? %s", localExtremaBetweenStartEndPricesExists));
+        Log.info(String.format("is it a contr imbalance?: %s", contrImbalanceExists));
         return imbalance.duration() > MIN_IMBALANCE_TIME_DURATION &&
                 seconds.get(imbalance.getStartTime()).size() * 2 < imbalance.size() &&
                 seconds.get(imbalance.getEndTime()).size() * 2 < imbalance.size() &&
-                seconds.subMap(imbalance.getStartTime(), imbalance.getEndTime()).entrySet().stream()
-                        .noneMatch(entry -> switch (imbalance.getType()) {
-                            case UP -> entry.getValue().high() > imbalance.getEndPrice();
-                            case DOWN -> entry.getValue().low() < imbalance.getEndPrice();
-                        }) &&
-                largeData.entrySet().stream()
-                        .filter(entry -> entry.getKey() <= imbalance.getStartTime() &&
-                                entry.getKey() >= imbalance.getStartTime() - TIME_CHECK_CONTR_IMBALANCE)
-                        .noneMatch(entry -> switch (imbalance.getType()) {
-                            case UP -> entry.getValue().high() > imbalance.getEndPrice() - imbalance.size() * 0.25;
-                            case DOWN -> entry.getValue().low() < imbalance.getEndPrice() + imbalance.size() * 0.25;
-                        });
+                !localExtremaBetweenStartEndPricesExists &&
+                !contrImbalanceExists;
     }
 
     private void trackImbalanceProgress(long currentTime, MarketEntry currentEntry) {
@@ -254,20 +262,22 @@ public class ImbalanceService implements VolatilityListener, MarketDataListener 
     private boolean checkProgressCondition(long currentTime, MarketEntry currentEntry) {
         switch (currentImbalance.getType()) {
             case UP -> {
-                if (currentEntry.high() >= currentImbalance.getEndPrice()) {
+                if (currentEntry.high() > currentImbalance.getEndPrice()) {
                     currentImbalance.setEndPrice(currentEntry.high());
                     currentImbalance.setEndTime(currentTime);
+                    if (currentState != State.PROGRESS)
+                        listeners.forEach(listener -> listener.notifyImbalanceStateUpdate(currentTime, currentState, currentImbalance));
                     currentState = State.PROGRESS;
-                    listeners.forEach(listener -> listener.notifyImbalanceStateUpdate(currentTime, currentState, currentImbalance));
                     return true;
                 }
             }
             case DOWN -> {
-                if (currentEntry.low() <= currentImbalance.getEndPrice()) {
+                if (currentEntry.low() < currentImbalance.getEndPrice()) {
                     currentImbalance.setEndPrice(currentEntry.low());
                     currentImbalance.setEndTime(currentTime);
+                    if (currentState != State.PROGRESS)
+                        listeners.forEach(listener -> listener.notifyImbalanceStateUpdate(currentTime, currentState, currentImbalance));
                     currentState = State.PROGRESS;
-                    listeners.forEach(listener -> listener.notifyImbalanceStateUpdate(currentTime, currentState, currentImbalance));
                     return true;
                 }
             }
@@ -278,7 +288,7 @@ public class ImbalanceService implements VolatilityListener, MarketDataListener 
     private boolean checkCompleteCondition(long currentTime) {
         double completeTime = currentImbalance.duration() * COMPLETE_TIME_MODIFICATOR;
         if (currentTime - currentImbalance.getEndTime() > Math.max(completeTime, MIN_COMPLETE_TIME)) {
-            Log.debug(currentImbalance.getType() + " completed: " + currentImbalance, currentTime);
+            Log.info(currentImbalance.getType() + " completed: " + currentImbalance, currentTime);
             currentState = State.COMPLETED;
             return true;
         }
@@ -286,13 +296,16 @@ public class ImbalanceService implements VolatilityListener, MarketDataListener 
     }
 
     public boolean checkPotentialEndPointCondition(long currentTime, MarketEntry currentEntry) {
-        double relevantSize = currentImbalance.size() / priceChangeThreshold; //TODO брать не от минимального изменения а от средней цены
+        double relevantSize = currentImbalance.size() / priceChangeThreshold;
         double possibleDuration = currentImbalance.duration() / relevantSize * POTENTIAL_COMPLETE_TIME_MODIFICATOR;
         if (currentTime - currentImbalance.getEndTime() < Math.max(possibleDuration, MIN_POTENTIAL_COMPLETE_TIME)) {
+            Log.info(String.format("computed duration: %.1f < %d", possibleDuration, MIN_POTENTIAL_COMPLETE_TIME));
             return false;
         }
 
-        if (Math.abs(currentImbalance.getEndPrice() - currentEntry.average()) / currentImbalance.size() > MAX_VALID_IMBALANCE_PART) {
+        double currentImbalanceReturnPart = Math.abs(currentImbalance.getEndPrice() - currentEntry.average()) / currentImbalance.size();
+        if (currentImbalanceReturnPart > MAX_VALID_IMBALANCE_PART) {
+            Log.info(String.format("imbalance already returned back on value: %.2f > %.2f", currentImbalanceReturnPart, MAX_VALID_IMBALANCE_PART));
             return false;
         }
 
@@ -307,9 +320,12 @@ public class ImbalanceService implements VolatilityListener, MarketDataListener 
             }
         };
         if (seconds.subMap(currentImbalance.getEndTime(), currentTime).values().stream().anyMatch(alreadyReturnedPriceCondition)) {
+            Log.info(String.format("from start of imbalance to now price was already returned to the first take level. " +
+                    "Seconds map: %s. Imbalance: %s", seconds.subMap(currentImbalance.getEndTime(), currentTime), currentImbalance.toString()));
             return false;
         }
 
+        Log.info(String.format("possible entry point with computed possible duration: %.1f (mills)", possibleDuration));
         currentImbalance.setComputedDuration(possibleDuration);
         return true;
     }
@@ -367,6 +383,7 @@ public class ImbalanceService implements VolatilityListener, MarketDataListener 
     private void resetImbalanceState() {
         currentImbalance = null;
         currentState = State.WAIT;
+        Log.info("state reset to initial");
     }
 
     private final List<ImbalanceStateListener> listeners = new ArrayList<>();
@@ -381,5 +398,20 @@ public class ImbalanceService implements VolatilityListener, MarketDataListener 
     public void unsubscribe(ImbalanceStateListener listener) {
         listeners.remove(listener);
         Log.info(String.format("listener removed %s", listener.getClass().getName()));
+    }
+
+    public void logAll() {
+        Log.debug(String.format("priceChangeThreshold: %.2f", priceChangeThreshold));
+        Log.debug(String.format("speedThreshold: %.2f", speedThreshold));
+        Log.debug(String.format("currentState: %s", currentState));
+        Log.debug(String.format("currentImbalance: %s", currentImbalance.toString()));
+        Log.debug(String.format("seconds: %s", seconds));
+        Log.debug(String.format("largeData: %s", largeData));
+        Log.debug(String.format("currentMinuteHigh: %.2f", currentMinuteHigh));
+        Log.debug(String.format("currentMinuteLow: %.2f", currentMinuteLow));
+        Log.debug(String.format("currentMinuteVolume: %.2f", currentMinuteVolume));
+        Log.debug(String.format("lastMinuteTimestamp: %d", lastMinuteTimestamp));
+        Log.debug(String.format("imbalances: %s", imbalances));
+        Log.debug(String.format("listeners: %s", listeners));
     }
 }

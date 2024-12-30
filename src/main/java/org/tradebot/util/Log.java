@@ -1,20 +1,12 @@
 package org.tradebot.util;
 
-
+import org.tradebot.service.TradingBot;
 import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.time.Instant;
-import java.time.ZoneOffset;
 import java.util.Arrays;
-import java.util.concurrent.atomic.AtomicLong;
-
-
 
 public class Log {
-
-    public static final Log.Level LOG_LEVEL = Level.DEBUG;
-    public static final ZoneOffset ZONE_OFFSET = ZoneOffset.of("+2");
 
     public enum Level {
         DEBUG,
@@ -22,8 +14,8 @@ public class Log {
         ERROR
     }
 
-    public static final long PROGRESS_LOG_STEP = 15_000L;
-    public static final String LOG_FILE_PATH = System.getProperty("user.dir") + "/src/main/resources/logs/output.log";
+    public static final String INFO_LOGS_PATH = System.getProperty("user.dir") + "/src/main/resources/logs/info/output.log";
+    public static final String FULL_LOGS_PATH = System.getProperty("user.dir") + "/src/main/resources/logs/all/output.log";
 
     public static void debug(String message) {
         log(message, Level.DEBUG);
@@ -36,21 +28,18 @@ public class Log {
                                 .map(StackTraceElement::toString)
                                 .reduce("", (s1, s2) -> s1 + "\n    at " + s2),
                 Level.ERROR);
+        TradingBot.logAll();
         return new RuntimeException(exception);
     }
 
     public static RuntimeException error(String message) {
         log("error got: " + message, Level.ERROR);
+        TradingBot.logAll();
         return new RuntimeException(message);
     }
 
-
     public static void info(String message) {
         log(message, Level.INFO);
-    }
-
-    public static void debug(String message, long mills) {
-        log(message, Level.DEBUG, mills);
     }
 
     public static void info(String message, long mills) {
@@ -68,30 +57,20 @@ public class Log {
         if (mills != -1) {
             logEntry += " on " + TimeFormatter.format(mills);
         }
-        writeLogFile(logEntry);
+
+        writeLogFile(logEntry, FULL_LOGS_PATH);
+
+        if (level != Level.DEBUG){
+            writeLogFile(logEntry, INFO_LOGS_PATH);
+        }
     }
 
-    private static void writeLogFile(String logEntry) {
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(LOG_FILE_PATH, true))) {
+    private static void writeLogFile(String logEntry, String filePath) {
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(filePath, true))) {
             writer.write(logEntry);
             writer.newLine();
         } catch (IOException e) {
-            throw Log.error(e);
-        }
-    }
-
-    public static void logProgress(long startTime, AtomicLong step, double progress, String operationName) {
-        if (progress == 0) {
-            return;
-        }
-        if (Instant.now().toEpochMilli() - startTime > step.get()) {
-            Instant approximateEndUTC = Instant.ofEpochMilli(startTime).plusMillis(
-                    Math.round((Instant.now().toEpochMilli() - startTime) / progress));
-
-            Log.info(String.format("operation '%s' progress %.2f%%. Will done ~ %s", operationName, progress * 100,
-                    TimeFormatter.format(approximateEndUTC, ZONE_OFFSET)));
-
-            step.addAndGet(PROGRESS_LOG_STEP);
+            throw new RuntimeException(e.getMessage());
         }
     }
 
