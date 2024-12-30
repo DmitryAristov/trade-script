@@ -4,6 +4,6 @@ import java.util.Map;
 
 public interface OrderBookListener {
 
-    void notify(Map<Double, Double> asks, Map<Double, Double> bids);
+    void notifyOrderBookUpdate(Map<Double, Double> asks, Map<Double, Double> bids);
 
 }

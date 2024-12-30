@@ -3,11 +3,11 @@ package org.tradebot.binance;
 import org.json.JSONObject;
 import org.tradebot.domain.MarketEntry;
 import org.tradebot.listener.MarketDataListener;
-import org.tradebot.service.ImbalanceService;
 import org.tradebot.util.Log;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Deque;
 import java.util.List;
 import java.util.concurrent.Executors;
@@ -19,20 +19,23 @@ public class TradeHandler {
     private static final int MAX_TRADE_QUEUE_SIZE = 100000;
     private final List<MarketDataListener> listeners = new ArrayList<>();
 
-    private final ImbalanceService imbalanceService = new ImbalanceService();
-    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
-
+    private ScheduledExecutorService marketDataScheduler;
     private Deque<JSONObject> activeQueue = new ArrayDeque<>(MAX_TRADE_QUEUE_SIZE);
     private Deque<JSONObject> processingQueue = new ArrayDeque<>(MAX_TRADE_QUEUE_SIZE);
     private Double lastPrice = null;
-    private int maxQueueSize = 0;
 
     public void start() {
-        scheduler.scheduleAtFixedRate(this::calculateMarketData, 1000 - System.currentTimeMillis() % 1000, 100, TimeUnit.MILLISECONDS);
+        if (marketDataScheduler == null || marketDataScheduler.isShutdown()) {
+            marketDataScheduler = Executors.newScheduledThreadPool(1);
+        }
+        marketDataScheduler.scheduleAtFixedRate(this::calculateMarketData, 1000 - System.currentTimeMillis() % 1000, 100, TimeUnit.MILLISECONDS);
     }
 
     public void stop() {
-        scheduler.shutdown();
+        if (marketDataScheduler != null && !marketDataScheduler.isShutdown()) {
+            marketDataScheduler.shutdownNow();
+            marketDataScheduler = null;
+        }
     }
 
     public void onMessage(JSONObject message) {
@@ -74,7 +77,7 @@ public class TradeHandler {
                 return;
             }
 
-            listeners.forEach(listener -> listener.notify(openTime, entry));
+            listeners.forEach(listener -> listener.notifyNewMarketEntry(openTime, entry));
         } catch (Exception e) {
             Log.debug(e);
         }
@@ -91,6 +94,10 @@ public class TradeHandler {
             lastPrice = entry.average();
         }
         return entry;
+    }
+
+    public void subscribe(MarketDataListener... listeners) {
+        Arrays.stream(listeners).forEach(this::subscribe);
     }
 
     public void subscribe(MarketDataListener listener) {

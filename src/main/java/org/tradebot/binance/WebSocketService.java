@@ -16,14 +16,27 @@ public class WebSocketService extends WebSocketClient {
 
     private final TradeHandler tradeHandler;
     private final OrderBookHandler orderBookHandler;
+    private final UserDataHandler userDataHandler;
+    private final RestAPIService apiService;
+    private boolean userDataStream = false;
+    private String listenKey = "";
 
-    public WebSocketService(TradeHandler tradeHandler, OrderBookHandler orderBookHandler) {
+    private ScheduledExecutorService pingUserDataStreamScheduler, pingWSConnectionTaskScheduler;
+
+    public WebSocketService(TradeHandler tradeHandler,
+                            OrderBookHandler orderBookHandler,
+                            UserDataHandler userDataHandler,
+                            RestAPIService apiService) {
         super(URI.create("wss://fstream.binance.com/ws"));
         this.tradeHandler = tradeHandler;
         this.orderBookHandler = orderBookHandler;
+        this.userDataHandler = userDataHandler;
+        this.apiService = apiService;
 
-        ScheduledExecutorService pingTaskScheduler = Executors.newScheduledThreadPool(1);
-        pingTaskScheduler.scheduleAtFixedRate(() -> {
+        if (pingWSConnectionTaskScheduler == null || pingWSConnectionTaskScheduler.isShutdown()) {
+            pingWSConnectionTaskScheduler = Executors.newScheduledThreadPool(1);
+        }
+        pingWSConnectionTaskScheduler.scheduleAtFixedRate(() -> {
             if (this.isOpen()) {
                 this.sendPing();
             }
@@ -40,18 +53,22 @@ public class WebSocketService extends WebSocketClient {
     public void onMessage(String msg) {
         JSONObject message = new JSONObject(msg);
         if (message.has("e")) {
-            String e = message.getString("e");
-            if (e.equals("trade")) {
+            String eventType = message.getString("e");
+            if ("trade".equals(eventType)) {
                 tradeHandler.onMessage(message);
-            } else if (e.equals("depthUpdate")) {
+            } else if ("depthUpdate".equals(eventType)) {
                 orderBookHandler.onMessage(message);
+            } else {
+                userDataHandler.onMessage(eventType, message);
             }
         } else if (message.has("id")) {
             int id = message.getInt("id");
-            if (id == 1 && message.get("result").toString().equals("null")) {
+            if (id == 1 && "null".equals(message.get("result").toString())) {
                 tradeHandler.start();
-            } else if (id == 2 && message.get("result").toString().equals("null")) {
-//                orderBookHandler.start();
+            } else if (id == 2 && "null".equals(message.get("result").toString())) {
+                orderBookHandler.start();
+            } else if (id == 3 && "null".equals(message.get("result").toString())) {
+                userDataStream = true;
             }
         }
     }
@@ -70,6 +87,40 @@ public class WebSocketService extends WebSocketClient {
         send(String.format("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"%s@trade\"], \"id\": 1}", SYMBOL.toLowerCase()));
         tradeHandler.stop();
         send(String.format("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"%s@depth@100ms\"], \"id\": 2}", SYMBOL.toLowerCase()));
-//        orderBookHandler.stop();
+        orderBookHandler.stop();
+        closeUserDataStream();
+
+        if (pingWSConnectionTaskScheduler != null && !pingWSConnectionTaskScheduler.isShutdown()) {
+            pingWSConnectionTaskScheduler.shutdownNow();
+            pingWSConnectionTaskScheduler = null;
+        }
+    }
+
+    public void closeUserDataStream() {
+        if (userDataStream) {
+            send(String.format("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"%s\"], \"id\": 3}", listenKey));
+            if (pingUserDataStreamScheduler != null && !pingUserDataStreamScheduler.isShutdown()) {
+                pingUserDataStreamScheduler.shutdownNow();
+                pingUserDataStreamScheduler = null;
+            }
+            apiService.removeUserStreamKey();
+            userDataStream = false;
+        }
+    }
+
+    public void openUserDataStream() {
+        if (!userDataStream) {
+            listenKey = apiService.getUserStreamKey();
+            send(String.format("{\"method\": \"SUBSCRIBE\", \"params\": [\"%s\"], \"id\": 3}", listenKey));
+
+            if (pingUserDataStreamScheduler == null || pingUserDataStreamScheduler.isShutdown()) {
+                pingUserDataStreamScheduler = Executors.newScheduledThreadPool(1);
+            }
+            pingUserDataStreamScheduler.scheduleAtFixedRate(() -> {
+                if (userDataStream) {
+                    apiService.keepAliveUserStreamKey();
+                }
+            }, 59, 59, TimeUnit.MINUTES);
+        }
     }
 }

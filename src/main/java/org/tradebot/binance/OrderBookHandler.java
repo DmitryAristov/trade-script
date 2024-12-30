@@ -3,19 +3,12 @@ package org.tradebot.binance;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.tradebot.listener.OrderBookListener;
-import org.tradebot.util.Log;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URI;
-import java.net.URL;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-
-import static org.tradebot.TradingBot.SYMBOL;
 
 public class OrderBookHandler {
     public static final long DEPTH_UNLOCK_WAIT_TIME_MILLS = 50_000L;
@@ -24,74 +17,61 @@ public class OrderBookHandler {
     private final Map<Double, Double> bids = new ConcurrentHashMap<>();
     private final Map<Double, Double> asks = new ConcurrentHashMap<>();
 
+    private final RestAPIService apiService;
+
     private long depthEndpointLockTimeMills = -1;
     private long orderBookLastUpdateId = -1;
     private boolean isOrderBookInitialized = false;
     private boolean firstOrderBookMessageReceived;
 
+    public OrderBookHandler(RestAPIService apiService) {
+        this.apiService = apiService;
+    }
+
     public void onMessage(JSONObject message) {
-        try {
-            if (!isOrderBookInitialized) {
-                initializeOrderBook();
-                return;
-            }
+        if (!isOrderBookInitialized) {
+            initializeOrderBook();
+            return;
+        }
 
-            long updateId = message.getLong("u");
-            if (!firstOrderBookMessageReceived) {
-                if (message.getLong("U") <= orderBookLastUpdateId && updateId >= orderBookLastUpdateId) {
-                    updateOrderBook(message, updateId);
-                    firstOrderBookMessageReceived = true;
-                }
-                return;
-            }
-
-            if (message.getLong("pu") == orderBookLastUpdateId) {
+        long updateId = message.getLong("u");
+        if (!firstOrderBookMessageReceived) {
+            if (message.getLong("U") <= orderBookLastUpdateId && updateId >= orderBookLastUpdateId) {
                 updateOrderBook(message, updateId);
-            } else {
-                isOrderBookInitialized = false;
+                firstOrderBookMessageReceived = true;
             }
-        } catch (Exception e) {
-            Log.debug(e);
+            return;
+        }
+
+        if (message.getLong("pu") == orderBookLastUpdateId) {
+            updateOrderBook(message, updateId);
+        } else {
+            isOrderBookInitialized = false;
         }
     }
 
     private void initializeOrderBook() {
-        try {
-            if (depthEndpointLockTimeMills != -1 &&
-                    System.currentTimeMillis() < depthEndpointLockTimeMills + DEPTH_UNLOCK_WAIT_TIME_MILLS) {
-                return;
-            }
-
-            URL url = new URI(String.format("https://fapi.binance.com/fapi/v1/depth?symbol=%s&limit=50", SYMBOL.toUpperCase())).toURL();
-            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-            connection.setRequestMethod("GET");
-
-            int responseCode = connection.getResponseCode();
-            if (responseCode == 429) {
-                isOrderBookInitialized = false;
-                depthEndpointLockTimeMills = System.currentTimeMillis();
-                return;
-            }
-
-            BufferedReader in = new BufferedReader(new InputStreamReader(connection.getInputStream()));
-            StringBuilder response = new StringBuilder();
-            String inputLine;
-            while ((inputLine = in.readLine()) != null) {
-                response.append(inputLine);
-            }
-            in.close();
-
-            JSONObject snapshot = new JSONObject(response.toString());
-            orderBookLastUpdateId = snapshot.getLong("lastUpdateId");
-
-            parseOrderBook(snapshot.getJSONArray("asks"), asks);
-            parseOrderBook(snapshot.getJSONArray("bids"), bids);
-            depthEndpointLockTimeMills = -1;
-            isOrderBookInitialized = true;
-            firstOrderBookMessageReceived = false;
-        } catch (Exception e) {
-            Log.debug(e);
+        if (depthEndpointLockTimeMills != -1 &&
+                System.currentTimeMillis() < depthEndpointLockTimeMills + DEPTH_UNLOCK_WAIT_TIME_MILLS) {
+            return;
         }
+
+        String response = apiService.getOrderBookPublicAPI();
+        if ("429".equals(response)) {
+            isOrderBookInitialized = false;
+            depthEndpointLockTimeMills = System.currentTimeMillis();
+            return;
+        }
+
+        JSONObject snapshot = new JSONObject(response);
+        orderBookLastUpdateId = snapshot.getLong("lastUpdateId");
+
+        parseOrderBook(snapshot.getJSONArray("asks"), asks);
+        parseOrderBook(snapshot.getJSONArray("bids"), bids);
+
+        depthEndpointLockTimeMills = -1;
+        isOrderBookInitialized = true;
+        firstOrderBookMessageReceived = false;
     }
 
     private void updateOrderBook(JSONObject data, long u) {
@@ -100,7 +80,7 @@ public class OrderBookHandler {
         orderBookLastUpdateId = u;
 
         if (firstOrderBookMessageReceived && isOrderBookInitialized) {
-            listeners.forEach(listener -> listener.notify(asks, bids));
+            listeners.forEach(listener -> listener.notifyOrderBookUpdate(asks, bids));
         }
     }
 
@@ -128,6 +108,10 @@ public class OrderBookHandler {
         }
     }
 
+    public void subscribe(OrderBookListener... listeners) {
+        Arrays.stream(listeners).forEach(this::subscribe);
+    }
+
     public void subscribe(OrderBookListener listener) {
         if (!listeners.contains(listener)) {
             listeners.add(listener);
@@ -136,5 +120,13 @@ public class OrderBookHandler {
 
     public void unsubscribe(OrderBookListener listener) {
         listeners.remove(listener);
+    }
+
+    public void start() {
+
+    }
+
+    public void stop() {
+
     }
 }

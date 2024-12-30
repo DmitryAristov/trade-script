@@ -6,6 +6,7 @@ import org.tradebot.listener.VolatilityListener;
 import org.tradebot.util.Log;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.TreeMap;
 
@@ -41,7 +42,7 @@ public class VolatilityService {
             double volatility = calculateVolatility(currentTime);
             double average = calculateAverage(currentTime);
             Log.debug(String.format("volatility=%.2f%% || average=%.2f$", volatility * 100, average), currentTime);
-            listeners.forEach(listener -> listener.notify(volatility, average));
+            listeners.forEach(listener -> listener.notifyVolatilityUpdate(volatility, average));
             lastUpdateTime = currentTime;
         }
     }
@@ -84,15 +85,14 @@ public class VolatilityService {
         return sum / marketData.size();
     }
 
+    public void subscribe(VolatilityListener... listeners) {
+        Arrays.stream(listeners).forEach(this::subscribe);
+    }
 
     public void subscribe(VolatilityListener listener) {
         if (!listeners.contains(listener)) {
             listeners.add(listener);
         }
-    }
-
-    public void subscribeAll(List<VolatilityListener> listeners_) {
-        listeners_.forEach(this::subscribe);
     }
 
     public void unsubscribe(VolatilityListener listener) {

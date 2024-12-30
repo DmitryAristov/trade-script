@@ -4,6 +4,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import org.tradebot.domain.AccountInfo;
 import org.tradebot.domain.Order;
+import org.tradebot.domain.Position;
 import org.tradebot.util.Log;
 
 import javax.crypto.Mac;
@@ -15,8 +16,8 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.Collection;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -28,7 +29,7 @@ public class RestAPIService {
     private static final String API_SECRET = "****";
     private static final String BASE_URL = "https://fapi.binance.com";
 
-    public int placeOrder(Order order) {
+    public void placeOrder(Order order) {
         Map<String, String> params = new HashMap<>();
 
         // mandatory params
@@ -52,9 +53,15 @@ public class RestAPIService {
         if (order.isClosePosition() != null) {
             params.put("closePosition", String.valueOf(order.isClosePosition()));
         }
+        if (order.getNewClientOrderId() != null) {
+            params.put("newClientOrderId", String.valueOf(order.getNewClientOrderId()));
+        }
 
-        String response = sendRequest("/fapi/v1/order", "POST", params);
-        return new JSONObject(response).getInt("orderId");
+        sendRequest("/fapi/v1/order", "POST", params);
+    }
+
+    public void placeOrders(Collection<Order> orders) {
+        orders.forEach(this::placeOrder);
     }
 
     public void setLeverage(int leverage) {
@@ -106,12 +113,46 @@ public class RestAPIService {
                 Double.parseDouble(account.getString("totalWalletBalance")));
     }
 
-    public String getOpenPositions() {
+    public Position getOpenPosition() {
         Map<String, String> params = new HashMap<>();
-        params.put("symbol", "DOGEUSDC");
+        params.put("symbol", SYMBOL.toUpperCase());
         params.put("recvWindow", "5000");
 
-        return sendRequest("/fapi/v1/openOrders", "GET", params);
+        String response = sendRequest("/fapi/v3/positionRisk", "GET", params);
+        JSONArray jsonArray = new JSONArray(response);
+        if (jsonArray.isEmpty()) {
+            return null;
+        } else {
+            JSONObject positionJson = jsonArray.getJSONObject(0);
+            double entryPrice = Double.parseDouble(positionJson.getString("entryPrice"));
+            double positionAmt = Double.parseDouble(positionJson.getString("positionAmt"));
+            if (entryPrice == 0 || positionAmt == 0) {
+                return null;
+            }
+            Position result = new Position();
+            result.setEntryPrice(entryPrice);
+            result.setPositionAmt(positionAmt);
+            return result;
+        }
+    }
+
+    public String getUserStreamKey() {
+        Map<String, String> params = new HashMap<>();
+        params.put("timestamp", String.valueOf(System.currentTimeMillis()));
+        String response = sendRequest("/fapi/v1/listenKey", "POST", params);
+        return new JSONObject(response).getString("listenKey");
+    }
+
+    public void keepAliveUserStreamKey() {
+        Map<String, String> params = new HashMap<>();
+        params.put("timestamp", String.valueOf(System.currentTimeMillis()));
+        sendRequest("/fapi/v1/listenKey", "PUT", params);
+    }
+
+    public String removeUserStreamKey() {
+        Map<String, String> params = new HashMap<>();
+        params.put("timestamp", String.valueOf(System.currentTimeMillis()));
+        return sendRequest("/fapi/v1/listenKey", "DELETE", params);
     }
 
     private String sendRequest(String endpoint, String method, Map<String, String> params) {
@@ -167,21 +208,30 @@ public class RestAPIService {
                 .collect(Collectors.joining("&"));
     }
 
-    public String getOrderBookPublicAPI() throws Exception {
-        URL url = new URI("https://fapi.binance.com/fapi/v1/depth?symbol=BTCUSDT&limit=50").toURL();
-        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-        connection.setRequestMethod("GET");
 
-        Map<String, List<String>> headers = connection.getHeaderFields();
-        headers.forEach((key, value) -> System.out.println(key + ": " + value));
 
-        BufferedReader in = new BufferedReader(new InputStreamReader(connection.getInputStream()));
-        StringBuilder response = new StringBuilder();
-        String inputLine;
-        while ((inputLine = in.readLine()) != null) {
-            response.append(inputLine);
+    public String getOrderBookPublicAPI() {
+        try {
+            URL url = new URI(String.format("https://fapi.binance.com/fapi/v1/depth?symbol=%s&limit=50", SYMBOL.toUpperCase())).toURL();
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("GET");
+
+            int responseCode = connection.getResponseCode();
+            if (responseCode == 429) {
+                return "429";
+            }
+
+            BufferedReader in = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+            StringBuilder response = new StringBuilder();
+            String inputLine;
+            while ((inputLine = in.readLine()) != null) {
+                response.append(inputLine);
+            }
+            in.close();
+            return response.toString();
+        } catch (Exception e) {
+            Log.debug(e);
+            return "";
         }
-        in.close();
-        return response.toString();
     }
 }

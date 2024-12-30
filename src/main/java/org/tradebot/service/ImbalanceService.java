@@ -7,7 +7,13 @@ import org.tradebot.listener.MarketDataListener;
 import org.tradebot.listener.VolatilityListener;
 import org.tradebot.util.Log;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.NavigableMap;
+import java.util.TreeMap;
 import java.util.function.Predicate;
 
 public class ImbalanceService implements VolatilityListener, MarketDataListener {
@@ -99,7 +105,7 @@ public class ImbalanceService implements VolatilityListener, MarketDataListener 
     }
 
     @Override
-    public void notify(long currentTime, MarketEntry currentEntry) {
+    public void notifyNewMarketEntry(long currentTime, MarketEntry currentEntry) {
         updateData(currentTime, currentEntry);
         switch (currentState) {
             case WAIT -> detectImbalance(currentTime, currentEntry);
@@ -200,7 +206,7 @@ public class ImbalanceService implements VolatilityListener, MarketDataListener 
 
         if (isValid(currentImbalance)) {
             currentState = State.PROGRESS;
-            listeners.forEach(listener -> listener.notify(currentTime, currentState, currentImbalance));
+            listeners.forEach(listener -> listener.notifyImbalanceStateUpdate(currentTime, currentState, currentImbalance));
             Log.debug(currentImbalance.getType() + " started: " + currentImbalance, seconds.lastKey());
         } else {
             currentImbalance = null;
@@ -242,7 +248,7 @@ public class ImbalanceService implements VolatilityListener, MarketDataListener 
 
         if (checkPotentialEndPointCondition(currentTime, currentEntry)) {
             currentState = State.POTENTIAL_END_POINT;
-            listeners.forEach(listener -> listener.notify(currentTime, currentState, currentImbalance));
+            listeners.forEach(listener -> listener.notifyImbalanceStateUpdate(currentTime, currentState, currentImbalance));
         }
     }
 
@@ -253,7 +259,7 @@ public class ImbalanceService implements VolatilityListener, MarketDataListener 
                     currentImbalance.setEndPrice(currentEntry.high());
                     currentImbalance.setEndTime(currentTime);
                     currentState = State.PROGRESS;
-                    listeners.forEach(listener -> listener.notify(currentTime, currentState, currentImbalance));
+                    listeners.forEach(listener -> listener.notifyImbalanceStateUpdate(currentTime, currentState, currentImbalance));
                     return true;
                 }
             }
@@ -262,7 +268,7 @@ public class ImbalanceService implements VolatilityListener, MarketDataListener 
                     currentImbalance.setEndPrice(currentEntry.low());
                     currentImbalance.setEndTime(currentTime);
                     currentState = State.PROGRESS;
-                    listeners.forEach(listener -> listener.notify(currentTime, currentState, currentImbalance));
+                    listeners.forEach(listener -> listener.notifyImbalanceStateUpdate(currentTime, currentState, currentImbalance));
                     return true;
                 }
             }
@@ -350,7 +356,7 @@ public class ImbalanceService implements VolatilityListener, MarketDataListener 
     }
 
     @Override
-    public void notify(double volatility, double average) {
+    public void notifyVolatilityUpdate(double volatility, double average) {
         this.priceChangeThreshold = average * PRICE_MODIFICATOR;
         this.speedThreshold = average * SPEED_MODIFICATOR;
 
@@ -368,6 +374,11 @@ public class ImbalanceService implements VolatilityListener, MarketDataListener 
     }
 
     private final List<ImbalanceStateListener> listeners = new ArrayList<>();
+
+    public void subscribe(ImbalanceStateListener... listeners) {
+        Arrays.stream(listeners).forEach(this::subscribe);
+    }
+
     public void subscribe(ImbalanceStateListener listener) {
         if (!listeners.contains(listener)) {
             listeners.add(listener);

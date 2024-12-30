@@ -31,6 +31,7 @@ public class Order implements Serializable {
     private Double stopPrice;
     private Boolean closePosition;
     private Boolean reduceOnly;
+    private String newClientOrderId;
 
     public Order() { }
 
@@ -103,6 +104,14 @@ public class Order implements Serializable {
 
     public void setReduceOnly(boolean reduceOnly) {
         this.reduceOnly = reduceOnly;
+    }
+
+    public String getNewClientOrderId() {
+        return newClientOrderId;
+    }
+
+    public void setNewClientOrderId(String newClientOrderId) {
+        this.newClientOrderId = newClientOrderId;
     }
 
     @Override
