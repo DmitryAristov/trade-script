@@ -5,7 +5,6 @@ import org.json.JSONObject;
 import org.tradebot.listener.OrderBookListener;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -108,10 +107,6 @@ public class OrderBookHandler {
         }
     }
 
-    public void subscribe(OrderBookListener... listeners) {
-        Arrays.stream(listeners).forEach(this::subscribe);
-    }
-
     public void subscribe(OrderBookListener listener) {
         if (!listeners.contains(listener)) {
             listeners.add(listener);
@@ -120,13 +115,5 @@ public class OrderBookHandler {
 
     public void unsubscribe(OrderBookListener listener) {
         listeners.remove(listener);
-    }
-
-    public void start() {
-
-    }
-
-    public void stop() {
-
     }
 }

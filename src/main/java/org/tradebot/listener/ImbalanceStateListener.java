@@ -5,5 +5,5 @@ import org.tradebot.service.ImbalanceService;
 
 public interface ImbalanceStateListener {
 
-    void notifyImbalanceStateUpdate(long time, ImbalanceService.State state, Imbalance currentImbalance);
+    void notifyImbalanceStateUpdate(long time, ImbalanceService.State state, Imbalance imbalance);
 }

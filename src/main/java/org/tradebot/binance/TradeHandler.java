@@ -7,7 +7,6 @@ import org.tradebot.util.Log;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Deque;
 import java.util.List;
 import java.util.concurrent.Executors;
@@ -94,10 +93,6 @@ public class TradeHandler {
             lastPrice = entry.average();
         }
         return entry;
-    }
-
-    public void subscribe(MarketDataListener... listeners) {
-        Arrays.stream(listeners).forEach(this::subscribe);
     }
 
     public void subscribe(MarketDataListener listener) {

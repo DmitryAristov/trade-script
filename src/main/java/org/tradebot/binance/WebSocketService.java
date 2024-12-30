@@ -66,7 +66,7 @@ public class WebSocketService extends WebSocketClient {
             if (id == 1 && "null".equals(message.get("result").toString())) {
                 tradeHandler.start();
             } else if (id == 2 && "null".equals(message.get("result").toString())) {
-                orderBookHandler.start();
+//                orderBookHandler.start();
             } else if (id == 3 && "null".equals(message.get("result").toString())) {
                 userDataStream = true;
             }
@@ -87,7 +87,7 @@ public class WebSocketService extends WebSocketClient {
         send(String.format("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"%s@trade\"], \"id\": 1}", SYMBOL.toLowerCase()));
         tradeHandler.stop();
         send(String.format("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"%s@depth@100ms\"], \"id\": 2}", SYMBOL.toLowerCase()));
-        orderBookHandler.stop();
+//        orderBookHandler.stop();
         closeUserDataStream();
 
         if (pingWSConnectionTaskScheduler != null && !pingWSConnectionTaskScheduler.isShutdown()) {

@@ -17,12 +17,6 @@ public class UserDataHandler {
 
             listeners.forEach(listener -> listener.notifyOrderUpdate(clientId, status));
 
-        } else if ("ACCOUNT_UPDATE".equals(eventType)) {
-            JSONObject updateData = message.getJSONObject("a");
-            if ("ORDER".equals(updateData.getString("m"))) {
-                listeners.forEach(listener -> listener.notifyAccountAndPositionUpdate(updateData));
-            }
-
         }
     }
 

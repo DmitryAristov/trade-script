@@ -6,7 +6,6 @@ import org.tradebot.listener.VolatilityListener;
 import org.tradebot.util.Log;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.TreeMap;
 
@@ -85,10 +84,6 @@ public class VolatilityService {
         return sum / marketData.size();
     }
 
-    public void subscribe(VolatilityListener... listeners) {
-        Arrays.stream(listeners).forEach(this::subscribe);
-    }
-
     public void subscribe(VolatilityListener listener) {
         if (!listeners.contains(listener)) {
             listeners.add(listener);
@@ -97,9 +92,5 @@ public class VolatilityService {
 
     public void unsubscribe(VolatilityListener listener) {
         listeners.remove(listener);
-    }
-
-    public void unsubscribeAll() {
-        listeners.clear();
     }
 }

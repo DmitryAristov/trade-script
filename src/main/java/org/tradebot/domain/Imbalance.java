@@ -10,11 +10,10 @@ public class Imbalance implements Serializable {
     public enum Type { UP, DOWN }
 
     private final Type type;
-    private long startTime;
-    private double startPrice;
+    private final long startTime;
+    private final double startPrice;
     private double endPrice;
     private long endTime;
-    private long completeTime;
     private double computedDuration;
 
     public Imbalance(long startTime, double startPrice, long endTime, double endPrice, Type type) {
@@ -33,18 +32,6 @@ public class Imbalance implements Serializable {
         return startTime;
     }
 
-    public void setStartTime(long startTime) {
-        this.startTime = startTime;
-    }
-
-    public double getStartPrice() {
-        return startPrice;
-    }
-
-    public void setStartPrice(double startPrice) {
-        this.startPrice = startPrice;
-    }
-
     public double getEndPrice() {
         return endPrice;
     }
@@ -59,18 +46,6 @@ public class Imbalance implements Serializable {
 
     public void setEndTime(long endTime) {
         this.endTime = endTime;
-    }
-
-    public long getCompleteTime() {
-        return completeTime;
-    }
-
-    public void setCompleteTime(long completeTime) {
-        this.completeTime = completeTime;
-    }
-
-    public double getComputedDuration() {
-        return computedDuration;
     }
 
     public void setComputedDuration(double computedDuration) {
@@ -90,14 +65,6 @@ public class Imbalance implements Serializable {
 
     public double speed() {
         return size() / duration();
-    }
-
-    public static Imbalance of(Imbalance imb) {
-        return new Imbalance(imb.startTime, imb.startPrice, imb.endTime, imb.endPrice, imb.type);
-    }
-
-    public static Imbalance of(long startTime, double startPrice, long endTime, double endPrice, Type type) {
-        return new Imbalance(startTime, startPrice, endTime, endPrice, type);
     }
 
     @Override

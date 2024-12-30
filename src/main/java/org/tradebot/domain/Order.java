@@ -5,8 +5,6 @@ import org.tradebot.util.TimeFormatter;
 import java.io.Serializable;
 
 public class Order implements Serializable {
-    public static final double LIMIT_ORDER_TRADE_FEE = 0.00002;
-    public static final double MARKET_ORDER_TRADE_FEE = 0.00005;
 
     public enum Side {
         BUY,
@@ -16,10 +14,7 @@ public class Order implements Serializable {
     public enum Type {
         MARKET,
         LIMIT,
-        STOP,
-        TAKE_PROFIT,
         STOP_MARKET,
-        TAKE_PROFIT_MARKET
     }
 
     private Side side;
@@ -75,19 +70,8 @@ public class Order implements Serializable {
         this.stopPrice = stopPrice;
     }
 
-    public long getCreateTime() {
-        return createTime;
-    }
-
     public void setCreateTime(long createTime) {
         this.createTime = createTime;
-    }
-
-    public double getTradeFee() {
-        return switch (type) {
-            case MARKET, STOP_MARKET, TAKE_PROFIT_MARKET -> MARKET_ORDER_TRADE_FEE;
-            case LIMIT, STOP, TAKE_PROFIT -> LIMIT_ORDER_TRADE_FEE;
-        };
     }
 
     public Boolean isClosePosition() {
@@ -118,13 +102,15 @@ public class Order implements Serializable {
     public String toString() {
         return String.format("""
                         Order
+                           side :: %s
                            type :: %s
+                           price :: %.2f
                            quantity :: %.2f$
-                           stopLossPrice :: %.2f$
                            createTime :: %s""",
                 side,
+                type,
+                price,
                 quantity,
-                stopLossPrice,
                 TimeFormatter.format(createTime));
     }
 }

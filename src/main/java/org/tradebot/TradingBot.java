@@ -39,7 +39,7 @@ public class TradingBot {
         }
 
         this.imbalanceService = new ImbalanceService();
-        this.strategy = new Strategy(imbalanceService, apiService, webSocketService);
+        this.strategy = new Strategy(apiService, webSocketService);
         this.imbalanceService.subscribe(strategy);
 
         this.volatilityService = new VolatilityService(apiService);

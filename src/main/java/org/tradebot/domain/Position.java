@@ -8,14 +8,9 @@ public class Position {
 
     private double entryPrice;
     private double positionAmt;
-    private Type type;
 
     public double getEntryPrice() {
         return entryPrice;
-    }
-
-    public double getPositionAmt() {
-        return positionAmt;
     }
 
     public void setEntryPrice(double entryPrice) {

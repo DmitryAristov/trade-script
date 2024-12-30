@@ -8,7 +8,6 @@ import org.tradebot.listener.VolatilityListener;
 import org.tradebot.util.Log;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Comparator;
 import java.util.LinkedList;
 import java.util.List;
@@ -280,7 +279,6 @@ public class ImbalanceService implements VolatilityListener, MarketDataListener 
         double completeTime = currentImbalance.duration() * COMPLETE_TIME_MODIFICATOR;
         if (currentTime - currentImbalance.getEndTime() > Math.max(completeTime, MIN_COMPLETE_TIME)) {
             Log.debug(currentImbalance.getType() + " completed: " + currentImbalance, currentTime);
-            currentImbalance.setCompleteTime(currentTime);
             currentState = State.COMPLETED;
             return true;
         }
@@ -375,10 +373,6 @@ public class ImbalanceService implements VolatilityListener, MarketDataListener 
 
     private final List<ImbalanceStateListener> listeners = new ArrayList<>();
 
-    public void subscribe(ImbalanceStateListener... listeners) {
-        Arrays.stream(listeners).forEach(this::subscribe);
-    }
-
     public void subscribe(ImbalanceStateListener listener) {
         if (!listeners.contains(listener)) {
             listeners.add(listener);
@@ -387,9 +381,5 @@ public class ImbalanceService implements VolatilityListener, MarketDataListener 
 
     public void unsubscribe(ImbalanceStateListener listener) {
         listeners.remove(listener);
-    }
-
-    public Imbalance getImbalance() {
-        return currentImbalance;
     }
 }

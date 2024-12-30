@@ -1,7 +1,6 @@
 package org.tradebot;
 
 
-import org.json.JSONObject;
 import org.tradebot.binance.RestAPIService;
 import org.tradebot.binance.WebSocketService;
 import org.tradebot.domain.Imbalance;
@@ -35,7 +34,6 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
     private static final double STOP_LOSS_MODIFICATOR = 0.015;
     private static final long POSITION_LIVE_TIME = 4;
 
-    private final ImbalanceService imbalanceService;
     private final RestAPIService apiService;
     private final WebSocketService webSocketService;
     private final Map<String, Order> orders = new HashMap<>();
@@ -48,28 +46,24 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
 
     private ScheduledExecutorService closePositionTimer;
 
-    public Strategy(ImbalanceService imbalanceService,
-                    RestAPIService apiService,
+    public Strategy(RestAPIService apiService,
                     WebSocketService webSocketService) {
-        this.imbalanceService = imbalanceService;
         this.apiService = apiService;
         this.webSocketService = webSocketService;
         this.availableBalance = apiService.getAccountBalance();
 
         Log.info(String.format("""
                         strategy parameters:
-                            takes count :: %d
                             takes modifiers :: %s
                             stop modificator :: %.2f
-                            position live time :: %d minutes""",
-                TAKE_PROFIT_THRESHOLDS.length,
+                            position live time :: %d hours""",
                 Arrays.toString(TAKE_PROFIT_THRESHOLDS),
                 STOP_LOSS_MODIFICATOR,
-                POSITION_LIVE_TIME / 60_000L));
+                POSITION_LIVE_TIME));
     }
 
     @Override
-    public void notifyImbalanceStateUpdate(long currentTime, ImbalanceService.State imbalanceState, Imbalance currentImbalance) {
+    public void notifyImbalanceStateUpdate(long currentTime, ImbalanceService.State imbalanceState, Imbalance imbalance) {
         switch (imbalanceState) {
             case PROGRESS -> {
                 webSocketService.openUserDataStream();
@@ -77,14 +71,13 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
             }
             case POTENTIAL_END_POINT -> {
                 if (state == State.ENTRY_POINT_SEARCH) {
-                    openPosition(currentTime);
+                    openPosition(currentTime, imbalance);
                 }
             }
         }
     }
 
-    private void openPosition(long currentTime) {
-        Imbalance imbalance = imbalanceService.getImbalance();
+    private void openPosition(long currentTime, Imbalance imbalance) {
 
         Order order = new Order();
         double price = switch (imbalance.getType()) {
@@ -207,7 +200,6 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
                     closePositionTimer.shutdownNow();
                     closePositionTimer = null;
                 }
-                return;
             }
         }
     }
@@ -257,10 +249,5 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
                 orders.put("stop", order);
             }
         }
-    }
-
-    @Override
-    public void notifyAccountAndPositionUpdate(JSONObject updateData) {
-        //TODO ?
     }
 }

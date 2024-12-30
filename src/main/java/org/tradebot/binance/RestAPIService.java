@@ -149,10 +149,10 @@ public class RestAPIService {
         sendRequest("/fapi/v1/listenKey", "PUT", params);
     }
 
-    public String removeUserStreamKey() {
+    public void removeUserStreamKey() {
         Map<String, String> params = new HashMap<>();
         params.put("timestamp", String.valueOf(System.currentTimeMillis()));
-        return sendRequest("/fapi/v1/listenKey", "DELETE", params);
+        sendRequest("/fapi/v1/listenKey", "DELETE", params);
     }
 
     private String sendRequest(String endpoint, String method, Map<String, String> params) {
