@@ -9,6 +9,8 @@ import org.tradebot.listener.ImbalanceStateListener;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
+import static org.tradebot.service.ImbalanceService.COMPLETE_TIME_MODIFICATOR;
+import static org.tradebot.service.ImbalanceService.MIN_COMPLETE_TIME;
 
 class ImbalanceServiceTest {
 
@@ -44,7 +46,11 @@ class ImbalanceServiceTest {
             imbalanceService.notifyNewMarketEntry(i * 1000, new MarketEntry(98000. + i * 100, 97900 + i * 100, 0));
         }
         assertEquals(ImbalanceService.State.PROGRESS, imbalanceService.currentState);
-        verify(mockListener, times(1)).notifyImbalanceStateUpdate(anyLong(), any(), any());
+        verify(mockListener, times(1)).notifyImbalanceStateUpdate(eq(20000L), eq(ImbalanceService.State.PROGRESS),
+                argThat(imbalance -> imbalance.getStartPrice() == 97900. &&
+                        imbalance.getEndPrice() == 100000. &&
+                        imbalance.getStartTime() == 0L &&
+                        imbalance.getEndTime() == 20000L));
     }
 
     @Test
@@ -54,8 +60,9 @@ class ImbalanceServiceTest {
             imbalanceService.notifyNewMarketEntry(i * 1000, new MarketEntry(98000. + i * 100, 97900 + i * 100, 0));
         }
         assertEquals(ImbalanceService.State.PROGRESS, imbalanceService.currentState);
-        verify(mockListener, times(0)).notifyImbalanceStateUpdate(anyLong(), eq(ImbalanceService.State.WAIT), any());
-        verify(mockListener, times(1)).notifyImbalanceStateUpdate(anyLong(), eq(ImbalanceService.State.PROGRESS), any());
+        verify(mockListener).notifyImbalanceStateUpdate(eq(20000L), eq(ImbalanceService.State.PROGRESS), any());
+        assertEquals(21000L, imbalanceService.currentImbalance.getEndTime());
+        assertEquals(100100., imbalanceService.currentImbalance.getEndPrice());
     }
 
     @Test
@@ -68,13 +75,18 @@ class ImbalanceServiceTest {
             lastTime = i * 1000;
             imbalanceService.notifyNewMarketEntry(lastTime, lastEntry);
         }
-        for (int i = 1; i < 10; i++) {
+        for (int i = 1; i < 4; i++) {
             imbalanceService.notifyNewMarketEntry(lastTime + i * 1000L, lastEntry);
         }
 
         assertEquals(ImbalanceService.State.POTENTIAL_END_POINT, imbalanceService.currentState);
-        verify(mockListener, times(1)).notifyImbalanceStateUpdate(anyLong(), eq(ImbalanceService.State.PROGRESS), any());
-        verify(mockListener, times(1)).notifyImbalanceStateUpdate(anyLong(), eq(ImbalanceService.State.POTENTIAL_END_POINT), any());
+        verify(mockListener, times(1)).notifyImbalanceStateUpdate(eq(20000L), eq(ImbalanceService.State.PROGRESS), any());
+        verify(mockListener, times(1)).notifyImbalanceStateUpdate(eq(23000L), eq(ImbalanceService.State.POTENTIAL_END_POINT), any());
+        assertEquals(97900, imbalanceService.currentImbalance.getStartPrice());
+        assertEquals(100100, imbalanceService.currentImbalance.getEndPrice());
+        assertEquals(0L, imbalanceService.currentImbalance.getStartTime());
+        assertEquals(21000L, imbalanceService.currentImbalance.getEndTime());
+        assertEquals("1145", String.format("%.0f", imbalanceService.currentImbalance.getComputedDuration()));
     }
 
     @Test
@@ -87,14 +99,26 @@ class ImbalanceServiceTest {
             lastTime = i * 1000;
             imbalanceService.notifyNewMarketEntry(lastTime, lastEntry);
         }
-        for (int i = 0; i < 61; i++) {
-            imbalanceService.notifyNewMarketEntry(lastTime + (i + 1) * 1000L, lastEntry);
+        int i = 1;
+        double completeTime = MIN_COMPLETE_TIME;
+        long currentTime = lastTime;
+        while (currentTime - imbalanceService.currentImbalance.getEndTime() <= Math.max(MIN_COMPLETE_TIME, completeTime)) {
+            currentTime = lastTime + i * 1000L;
+            imbalanceService.notifyNewMarketEntry(currentTime, lastEntry);
+            completeTime = imbalanceService.currentImbalance.duration() * COMPLETE_TIME_MODIFICATOR;
+            i++;
         }
 
-        assertEquals(ImbalanceService.State.COMPLETED, imbalanceService.currentState);
-        verify(mockListener, times(1)).notifyImbalanceStateUpdate(anyLong(), eq(ImbalanceService.State.PROGRESS), any());
-        verify(mockListener, times(1)).notifyImbalanceStateUpdate(anyLong(), eq(ImbalanceService.State.POTENTIAL_END_POINT), any());
+        verify(mockListener, times(1)).notifyImbalanceStateUpdate(eq(20000L), eq(ImbalanceService.State.PROGRESS), any());
+        verify(mockListener, times(1)).notifyImbalanceStateUpdate(eq(23000L), eq(ImbalanceService.State.POTENTIAL_END_POINT), any());
         verify(mockListener, times(0)).notifyImbalanceStateUpdate(anyLong(), eq(ImbalanceService.State.COMPLETED), any());
+
+        assertEquals(ImbalanceService.State.COMPLETED, imbalanceService.currentState);
+        assertEquals(97900, imbalanceService.currentImbalance.getStartPrice());
+        assertEquals(100100, imbalanceService.currentImbalance.getEndPrice());
+        assertEquals(0L, imbalanceService.currentImbalance.getStartTime());
+        assertEquals(21000L, imbalanceService.currentImbalance.getEndTime());
+        assertEquals("1145", String.format("%.0f", imbalanceService.currentImbalance.getComputedDuration()));
     }
 
     @Test

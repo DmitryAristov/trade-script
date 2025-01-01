@@ -36,6 +36,10 @@ public class Imbalance implements Serializable {
         return endPrice;
     }
 
+    public double getStartPrice() {
+        return startPrice;
+    }
+
     public void setEndPrice(double endPrice) {
         this.endPrice = endPrice;
     }
@@ -46,6 +50,10 @@ public class Imbalance implements Serializable {
 
     public void setEndTime(long endTime) {
         this.endTime = endTime;
+    }
+
+    public double getComputedDuration() {
+        return computedDuration;
     }
 
     public void setComputedDuration(double computedDuration) {

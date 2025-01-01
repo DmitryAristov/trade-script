@@ -16,17 +16,13 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 public class Strategy implements OrderBookListener, ImbalanceStateListener, UserDataListener {
-
-    public enum State {
-        ENTRY_POINT_SEARCH,
-        WAIT_POSITION_CLOSED
-    }
 
     private static final double[] TAKE_PROFIT_THRESHOLDS = new double[]{0.35, 0.75};
     private static final double STOP_LOSS_MODIFICATOR = 0.015;
@@ -36,13 +32,13 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
     private final WebSocketService webSocketService;
     private final String symbol;
     private final int leverage;
-    private final Map<String, Order> orders = new HashMap<>();
 
     private Map<Double, Double> bids = new ConcurrentHashMap<>();
     private Map<Double, Double> asks = new ConcurrentHashMap<>();
-
-    public State state;
     private double availableBalance;
+
+    protected final Map<String, Order> orders = new HashMap<>();
+    protected boolean positionOpened = false;
     protected ScheduledExecutorService closePositionTimer;
 
     public Strategy(String symbol,
@@ -68,12 +64,9 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
     @Override
     public void notifyImbalanceStateUpdate(long currentTime, ImbalanceService.State imbalanceState, Imbalance imbalance) {
         switch (imbalanceState) {
-            case PROGRESS -> {
-                webSocketService.openUserDataStream();
-                state = State.ENTRY_POINT_SEARCH;
-            }
+            case PROGRESS -> webSocketService.openUserDataStream();
             case POTENTIAL_END_POINT -> {
-                if (state == State.ENTRY_POINT_SEARCH) {
+                if (!positionOpened) {
                     openPosition(currentTime, imbalance);
                 }
             }
@@ -106,6 +99,7 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
 
         orders.put("position_open_order", order);
         Log.info(String.format("open position market order created: %s", order));
+
         apiService.placeOrder(order);
     }
 
@@ -124,6 +118,7 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
                     String clientId = String.format("take_%d", i + 1);
                     order.setNewClientOrderId(clientId);
                     order.setTimeInForce(Order.TimeInForce.GTC);
+
                     orders.put(clientId, order);
                     Log.info(String.format("take profit limit order created: %s", order));
                 }
@@ -134,6 +129,7 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
                 order.setStopPrice(imbalance.getEndPrice() + imbalanceSize * STOP_LOSS_MODIFICATOR);
                 order.setClosePosition(true);
                 order.setNewClientOrderId("stop");
+
                 orders.put("stop", order);
                 Log.info(String.format("stop market order created: %s", order));
             }
@@ -149,6 +145,7 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
                     String clientId = String.format("take_%d", i + 1);
                     order.setNewClientOrderId(clientId);
                     order.setTimeInForce(Order.TimeInForce.GTC);
+
                     orders.put(clientId, order);
                     Log.info(String.format("take profit limit order created: %s", order));
                 }
@@ -159,6 +156,7 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
                 order.setStopPrice(imbalance.getEndPrice() - imbalanceSize * STOP_LOSS_MODIFICATOR);
                 order.setClosePosition(true);
                 order.setNewClientOrderId("stop");
+
                 orders.put("stop", order);
                 Log.info(String.format("stop market order created: %s", order));
             }
@@ -187,7 +185,7 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
                 Log.info("position will be closed ", System.currentTimeMillis() + POSITION_LIVE_TIME * 60 * 60 * 1000L);
                 closePositionTimer.schedule(this::closePositionByTimeout, POSITION_LIVE_TIME, TimeUnit.HOURS);
 
-                state = State.WAIT_POSITION_CLOSED;
+                positionOpened = true;
                 return;
             }
             if ("take_1".equals(clientId)) {
@@ -196,22 +194,10 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
                 placeBreakEvenStop();
                 return;
             }
-            if ("take_2".equals(clientId)) {
-                Log.info("second take limit order filled");
-                orders.remove("take_2");
+            if (List.of("take_2", "stop", "breakeven_stop", "timeout_stop").contains(clientId)) {
+                Log.info(String.format("%s order filled, position is closed", clientId));
+                orders.remove(clientId);
                 reinitState();
-                return;
-            }
-            if ("stop".equals(clientId)) {
-                Log.info("stop market order filled");
-                orders.remove("stop");
-                reinitState();
-                return;
-            }
-            if ("timeout_stop".equals(clientId)) {
-                Log.info("timeout stop market order filled");
-                reinitState();
-                stopClosePositionTimer();
             }
         }
     }
@@ -220,7 +206,9 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
         availableBalance = apiService.getAccountBalance();
         Log.info(String.format("reset state to initial. Updated balance: %.2f",availableBalance));
         webSocketService.closeUserDataStream();
-        state = State.ENTRY_POINT_SEARCH;
+        stopClosePositionTimer();
+        orders.clear();
+        positionOpened = false;
     }
 
     protected void closePositionByTimeout() {
@@ -235,11 +223,14 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
         order.setType(Order.Type.MARKET);
         order.setClosePosition(true);
         order.setNewClientOrderId("timeout_stop");
-        switch (position.getType()) {
-            case SHORT -> order.setSide(Order.Side.BUY);
-            case LONG -> order.setSide(Order.Side.SELL);
-        }
+        order.setSide(switch (position.getType()) {
+            case SHORT -> Order.Side.BUY;
+            case LONG -> Order.Side.SELL;
+        });
+
+        orders.put("timeout_stop", order);
         Log.info(String.format("timeout stop order created: %s", order));
+
         apiService.placeOrder(order);
     }
 
@@ -251,30 +242,23 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
         }
 
         orders.remove("stop");
-        switch (position.getType()) {
-            case SHORT -> {
-                Order order = new Order();
-                order.setSymbol(symbol);
-                order.setSide(Order.Side.BUY);
-                order.setType(Order.Type.STOP_MARKET);
-                //TODO add fees calculation
-                order.setStopPrice(position.getEntryPrice());
-                order.setClosePosition(true);
-                orders.put("stop", order);
-                Log.info(String.format("stop market order modified: %s", order));
-            }
-            case LONG -> {
-                Order order = new Order();
-                order.setSymbol(symbol);
-                order.setSide(Order.Side.SELL);
-                order.setType(Order.Type.STOP_MARKET);
-                order.setStopPrice(position.getEntryPrice());
-                order.setClosePosition(true);
-                orders.put("stop", order);
-                Log.info(String.format("stop market order modified: %s", order));
-            }
-        }
-        apiService.placeOrder(orders.get("stop"));
+        Order order = new Order();
+        order.setSymbol(symbol);
+        order.setType(Order.Type.STOP_MARKET);
+
+        //TODO add fees calculation
+        order.setStopPrice(position.getEntryPrice());
+        order.setClosePosition(true);
+        order.setNewClientOrderId("breakeven_stop");
+        order.setSide(switch (position.getType()) {
+            case SHORT -> Order.Side.BUY;
+            case LONG -> Order.Side.SELL;
+        });
+
+        orders.put("breakeven_stop", order);
+        Log.info(String.format("stop market order modified: %s", order));
+
+        apiService.placeOrder(orders.get("breakeven_stop"));
     }
 
     public void stopClosePositionTimer() {
@@ -291,7 +275,7 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
         Log.debug(String.format("orders: %s", orders));
         Log.debug(String.format("bids: %s", bids));
         Log.debug(String.format("asks: %s", asks));
-        Log.debug(String.format("state: %s", state));
+        Log.debug(String.format("positionOpened: %s", positionOpened));
         Log.debug(String.format("availableBalance: %s", availableBalance));
         Log.debug(String.format("closePositionTimer isShutdown: %s", closePositionTimer.isShutdown()));
         Log.debug(String.format("closePositionTimer isTerminated: %s", closePositionTimer.isTerminated()));
