@@ -9,6 +9,7 @@ import org.tradebot.binance.TradeHandler;
 import org.tradebot.domain.AccountInfo;
 import org.tradebot.domain.Precision;
 import org.tradebot.util.Log;
+import org.tradebot.util.TaskManager;
 
 public class TradingBot {
 
@@ -28,6 +29,7 @@ public class TradingBot {
 
     protected final HttpClientService httpClient = new HttpClientService();
     protected final RestAPIService apiService = new RestAPIService(httpClient);
+    protected final TaskManager taskManager = new TaskManager();
     protected ImbalanceService imbalanceService;
     protected Strategy strategy;
     protected VolatilityService volatilityService;
@@ -53,19 +55,18 @@ public class TradingBot {
         }
 
         imbalanceService = new ImbalanceService();
-        tradeHandler = new TradeHandler();
+        tradeHandler = new TradeHandler(taskManager);
         userDataStreamHandler = new UserDataHandler();
         orderBookHandler = new OrderBookHandler(symbol, apiService);
-        webSocketService = new WebSocketService(symbol, tradeHandler, orderBookHandler, userDataStreamHandler, apiService);
-        volatilityService = new VolatilityService(symbol, apiService);
-        strategy = new Strategy(symbol, leverage, apiService, webSocketService);
+        webSocketService = new WebSocketService(symbol, tradeHandler, orderBookHandler, userDataStreamHandler, apiService, taskManager);
+        volatilityService = new VolatilityService(symbol, apiService, taskManager);
+        strategy = new Strategy(symbol, leverage, apiService, webSocketService, taskManager);
 
         imbalanceService.subscribe(strategy);
         tradeHandler.subscribe(imbalanceService);
         volatilityService.subscribe(imbalanceService);
         orderBookHandler.subscribe(strategy);
         userDataStreamHandler.subscribe(strategy);
-        volatilityService.start();
         webSocketService.connect();
         Log.info("bot started");
     }
@@ -73,12 +74,11 @@ public class TradingBot {
     public void stop() {
         imbalanceService.unsubscribe(strategy);
         volatilityService.unsubscribe(imbalanceService);
-        volatilityService.stop();
         tradeHandler.unsubscribe(imbalanceService);
         orderBookHandler.unsubscribe(strategy);
         userDataStreamHandler.unsubscribe(strategy);
-        strategy.stopClosePositionTimer();
-        webSocketService.unsubscribe();
+        taskManager.stopAll();
+        webSocketService.stop();
         webSocketService.close();
         Log.info("bot stopped");
     }
@@ -91,12 +91,6 @@ public class TradingBot {
         instance.userDataStreamHandler.logAll();
         instance.strategy.logAll();
         instance.webSocketService.logAll();
-    }
-
-    public static void main(String[] args) throws InterruptedException {
-        TradingBot bot = new TradingBot("DOGEUSDT", 6);
-        bot.start();
-        Thread.sleep(60000L);
-        bot.stop();
+        instance.taskManager.logAll();
     }
 }

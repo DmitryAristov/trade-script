@@ -9,6 +9,7 @@ import org.tradebot.listener.ImbalanceStateListener;
 import org.tradebot.listener.OrderBookListener;
 import org.tradebot.listener.UserDataListener;
 import org.tradebot.util.Log;
+import org.tradebot.util.TaskManager;
 import org.tradebot.util.TimeFormatter;
 
 import java.time.Instant;
@@ -18,8 +19,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 public class Strategy implements OrderBookListener, ImbalanceStateListener, UserDataListener {
@@ -30,6 +29,7 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
 
     private final RestAPIService apiService;
     private final WebSocketService webSocketService;
+    private final TaskManager taskManager;
     private final String symbol;
     private final int leverage;
 
@@ -39,16 +39,17 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
 
     protected final Map<String, Order> orders = new HashMap<>();
     protected boolean positionOpened = false;
-    protected ScheduledExecutorService closePositionTimer;
 
     public Strategy(String symbol,
                     int leverage,
                     RestAPIService apiService,
-                    WebSocketService webSocketService) {
+                    WebSocketService webSocketService,
+                    TaskManager taskManager) {
         this.symbol = symbol;
         this.leverage = leverage;
         this.apiService = apiService;
         this.webSocketService = webSocketService;
+        this.taskManager = taskManager;
         this.availableBalance = apiService.getAccountBalance();
 
         Log.info(String.format("""
@@ -178,13 +179,8 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
                 orders.remove("position_open_order");
                 apiService.placeOrders(orders.values());
 
-                if (closePositionTimer == null || closePositionTimer.isShutdown()) {
-                    closePositionTimer = Executors.newScheduledThreadPool(1);
-                }
-                Log.info("close position timer created", System.currentTimeMillis());
-                Log.info("position will be closed ", System.currentTimeMillis() + POSITION_LIVE_TIME * 60 * 60 * 1000L);
-                closePositionTimer.schedule(this::closePositionByTimeout, POSITION_LIVE_TIME, TimeUnit.HOURS);
-
+                taskManager.create("close_position", this::closePositionByTimeout, TaskManager.Type.ONCE, POSITION_LIVE_TIME, -1, TimeUnit.HOURS);
+                Log.info("position will be closed", System.currentTimeMillis() + POSITION_LIVE_TIME * 60 * 60 * 1000L);
                 positionOpened = true;
                 return;
             }
@@ -206,7 +202,7 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
         availableBalance = apiService.getAccountBalance();
         Log.info(String.format("reset state to initial. Updated balance: %.2f",availableBalance));
         webSocketService.closeUserDataStream();
-        stopClosePositionTimer();
+        taskManager.stop("close_position");
         orders.clear();
         positionOpened = false;
     }
@@ -261,14 +257,6 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
         apiService.placeOrder(orders.get("breakeven_stop"));
     }
 
-    public void stopClosePositionTimer() {
-        if (closePositionTimer != null && !closePositionTimer.isShutdown()) {
-            closePositionTimer.shutdownNow();
-            closePositionTimer = null;
-            Log.info("close position timer off");
-        }
-    }
-
     public void logAll() {
         Log.debug(String.format("symbol: %s", symbol));
         Log.debug(String.format("leverage: %d", leverage));
@@ -277,7 +265,5 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
         Log.debug(String.format("asks: %s", asks));
         Log.debug(String.format("positionOpened: %s", positionOpened));
         Log.debug(String.format("availableBalance: %s", availableBalance));
-        Log.debug(String.format("closePositionTimer isShutdown: %s", closePositionTimer.isShutdown()));
-        Log.debug(String.format("closePositionTimer isTerminated: %s", closePositionTimer.isTerminated()));
     }
 }

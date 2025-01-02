@@ -4,10 +4,9 @@ import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.handshake.ServerHandshake;
 import org.json.JSONObject;
 import org.tradebot.util.Log;
+import org.tradebot.util.TaskManager;
 
 import java.net.URI;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 public class WebSocketService extends WebSocketClient {
@@ -16,34 +15,39 @@ public class WebSocketService extends WebSocketClient {
     private final OrderBookHandler orderBookHandler;
     private final UserDataHandler userDataHandler;
     private final RestAPIService apiService;
+    private final TaskManager taskManager;
     private final String symbol;
     private boolean userDataStream = false;
     private String listenKey = "";
-
-    private ScheduledExecutorService pingUserDataStreamScheduler, pingWSConnectionTaskScheduler;
 
     public WebSocketService(String symbol,
                             TradeHandler tradeHandler,
                             OrderBookHandler orderBookHandler,
                             UserDataHandler userDataHandler,
-                            RestAPIService apiService) {
+                            RestAPIService apiService,
+                            TaskManager taskManager) {
         super(URI.create("wss://fstream.binance.com/ws"));
         this.symbol = symbol;
         this.tradeHandler = tradeHandler;
         this.orderBookHandler = orderBookHandler;
         this.userDataHandler = userDataHandler;
         this.apiService = apiService;
-        this.tradeHandler.start();
+        this.taskManager = taskManager;
 
-        if (pingWSConnectionTaskScheduler == null || pingWSConnectionTaskScheduler.isShutdown()) {
-            pingWSConnectionTaskScheduler = Executors.newScheduledThreadPool(1);
-        }
-        pingWSConnectionTaskScheduler.scheduleAtFixedRate(() -> {
+        this.taskManager.create("websocket_ping", () -> {
             if (this.isOpen()) {
                 Log.info("websocket ping");
                 this.sendPing();
             }
-        }, 5, 5, TimeUnit.MINUTES);
+        }, TaskManager.Type.PERIOD, 5, 5, TimeUnit.MINUTES);
+        //TODO test reconnection from here
+        this.taskManager.create("websocket_reconnect", () -> {
+            if (this.isOpen()) {
+                Log.info("websocket reconnect");
+                this.reconnect();
+            }
+        }, TaskManager.Type.PERIOD, 24 * 60 -  5, 24 * 60 -  5, TimeUnit.MINUTES);
+
         Log.info("service created");
     }
 
@@ -79,28 +83,19 @@ public class WebSocketService extends WebSocketClient {
         Log.error(e);
     }
 
-    public void unsubscribe() {
+    public void stop() {
         send(String.format("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"%s@trade\"], \"id\": 1}", symbol.toLowerCase()));
-        tradeHandler.stop();
         send(String.format("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"%s@depth@100ms\"], \"id\": 2}", symbol.toLowerCase()));
         closeUserDataStream();
-
-        if (pingWSConnectionTaskScheduler != null && !pingWSConnectionTaskScheduler.isShutdown()) {
-            pingWSConnectionTaskScheduler.shutdownNow();
-            pingWSConnectionTaskScheduler = null;
-            Log.info("service stopped");
-        }
+        
+        Log.info("service stopped");
     }
 
     public void closeUserDataStream() {
         if (userDataStream) {
             userDataStream = false;
             send(String.format("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"%s\"], \"id\": 3}", listenKey));
-            if (pingUserDataStreamScheduler != null && !pingUserDataStreamScheduler.isShutdown()) {
-                pingUserDataStreamScheduler.shutdownNow();
-                pingUserDataStreamScheduler = null;
-                Log.info("user data stream stopped");
-            }
+            taskManager.stop("user_data_stream_ping");
             apiService.removeUserStreamKey();
         }
     }
@@ -111,15 +106,12 @@ public class WebSocketService extends WebSocketClient {
             listenKey = apiService.getUserStreamKey();
             send(String.format("{\"method\": \"SUBSCRIBE\", \"params\": [\"%s\"], \"id\": 3}", listenKey));
 
-            if (pingUserDataStreamScheduler == null || pingUserDataStreamScheduler.isShutdown()) {
-                pingUserDataStreamScheduler = Executors.newScheduledThreadPool(1);
-            }
-            pingUserDataStreamScheduler.scheduleAtFixedRate(() -> {
+            taskManager.create("user_data_stream_ping", () -> {
                 if (userDataStream) {
                     Log.info("user data stream keep alive");
                     apiService.keepAliveUserStreamKey();
                 }
-            }, 59, 59, TimeUnit.MINUTES);
+            }, TaskManager.Type.PERIOD, 59, 59, TimeUnit.MINUTES);
             Log.info("user data stream started");
         }
     }
@@ -128,9 +120,6 @@ public class WebSocketService extends WebSocketClient {
         Log.debug(String.format("symbol: %s", symbol));
         Log.debug(String.format("userDataStream: %s", userDataStream));
         Log.debug(String.format("listenKey: %s", listenKey));
-        Log.debug(String.format("pingWSConnectionTaskScheduler isShutdown: %s", pingWSConnectionTaskScheduler.isShutdown()));
-        Log.debug(String.format("pingWSConnectionTaskScheduler isTerminated: %s", pingWSConnectionTaskScheduler.isTerminated()));
-        Log.debug(String.format("pingUserDataStreamScheduler isShutdown: %s", pingUserDataStreamScheduler.isShutdown()));
-        Log.debug(String.format("pingUserDataStreamScheduler isTerminated: %s", pingUserDataStreamScheduler.isTerminated()));
+        Log.debug(String.format("this.isOpen(): %s", this.isOpen()));
     }
 }

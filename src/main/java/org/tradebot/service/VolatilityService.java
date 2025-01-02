@@ -4,12 +4,11 @@ import org.tradebot.binance.RestAPIService;
 import org.tradebot.domain.MarketEntry;
 import org.tradebot.listener.VolatilityListener;
 import org.tradebot.util.Log;
+import org.tradebot.util.TaskManager;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.TreeMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 public class VolatilityService {
@@ -21,9 +20,8 @@ public class VolatilityService {
     private final RestAPIService apiService;
     private final List<VolatilityListener> listeners = new ArrayList<>();
     private final String symbol;
-    private ScheduledExecutorService volatilityUpdateScheduler;
 
-    public VolatilityService(String symbol, RestAPIService apiService) {
+    public VolatilityService(String symbol, RestAPIService apiService, TaskManager taskManager) {
         Log.info(String.format("""
                         imbalance parameters:
                             update time period :: %d hours
@@ -34,29 +32,15 @@ public class VolatilityService {
                 AVERAGE_PRICE_CALCULATE_PAST_TIME));
         this.symbol = symbol;
         this.apiService = apiService;
-    }
-
-    public void start() {
-        if (volatilityUpdateScheduler == null || volatilityUpdateScheduler.isShutdown()) {
-            volatilityUpdateScheduler = Executors.newScheduledThreadPool(1);
-        }
-        volatilityUpdateScheduler.scheduleAtFixedRate(this::updateParams, 0, UPDATE_TIME_PERIOD_HOURS, TimeUnit.HOURS);
+        taskManager.create("volatility_update", this::updateVolatility, TaskManager.Type.PERIOD, 0, UPDATE_TIME_PERIOD_HOURS, TimeUnit.HOURS);
         Log.info("service started");
     }
 
-    private void updateParams() {
+    private void updateVolatility() {
         double volatility = calculateVolatility();
         double average = calculateAverage();
         Log.info(String.format("volatility=%.2f, average=%.2f", volatility, average));
         listeners.forEach(listener -> listener.notifyVolatilityUpdate(volatility, average));
-    }
-
-    public void stop() {
-        if (volatilityUpdateScheduler != null && !volatilityUpdateScheduler.isShutdown()) {
-            volatilityUpdateScheduler.shutdownNow();
-            volatilityUpdateScheduler = null;
-        }
-        Log.info("service stopped");
     }
 
     private double calculateVolatility() {
@@ -106,7 +90,5 @@ public class VolatilityService {
     public void logAll() {
         Log.debug(String.format("symbol: %s", symbol));
         Log.debug(String.format("listeners: %s", listeners));
-        Log.debug(String.format("volatilityUpdateScheduler isShutdown: %s", volatilityUpdateScheduler.isShutdown()));
-        Log.debug(String.format("volatilityUpdateScheduler isTerminated: %s", volatilityUpdateScheduler.isTerminated()));
     }
 }

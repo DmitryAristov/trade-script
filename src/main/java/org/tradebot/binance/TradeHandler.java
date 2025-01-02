@@ -4,13 +4,12 @@ import org.json.JSONObject;
 import org.tradebot.domain.MarketEntry;
 import org.tradebot.listener.MarketDataListener;
 import org.tradebot.util.Log;
+import org.tradebot.util.TaskManager;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 public class TradeHandler {
@@ -18,25 +17,14 @@ public class TradeHandler {
     private static final int MAX_TRADE_QUEUE_SIZE = 100000;
     protected final List<MarketDataListener> listeners = new ArrayList<>();
 
-    protected ScheduledExecutorService marketDataScheduler;
     protected Deque<JSONObject> activeQueue = new ArrayDeque<>(MAX_TRADE_QUEUE_SIZE);
     protected Deque<JSONObject> processingQueue = new ArrayDeque<>(MAX_TRADE_QUEUE_SIZE);
     protected Double lastPrice = null;
 
-    public void start() {
-        if (marketDataScheduler == null || marketDataScheduler.isShutdown()) {
-            marketDataScheduler = Executors.newScheduledThreadPool(1);
-        }
-        marketDataScheduler.scheduleAtFixedRate(this::calculateMarketData, 1000 - System.currentTimeMillis() % 1000, 100, TimeUnit.MILLISECONDS);
+    public TradeHandler(TaskManager taskManager) {
+        taskManager.create("market_data_update", this::updateMarketData, TaskManager.Type.PERIOD,
+                1000 - System.currentTimeMillis() % 1000, 100, TimeUnit.MILLISECONDS);
         Log.info("service started");
-    }
-
-    public void stop() {
-        if (marketDataScheduler != null && !marketDataScheduler.isShutdown()) {
-            marketDataScheduler.shutdownNow();
-            marketDataScheduler = null;
-            Log.info("service stopped");
-        }
     }
 
     public void onMessage(JSONObject message) {
@@ -48,7 +36,7 @@ public class TradeHandler {
         }
     }
 
-    protected void calculateMarketData() {
+    protected void updateMarketData() {
         try {
             //TODO how can we move to binance time?
             long openTime = System.currentTimeMillis();
@@ -114,7 +102,5 @@ public class TradeHandler {
         Log.debug(String.format("activeQueue: %s", activeQueue));
         Log.debug(String.format("processingQueue: %s", processingQueue));
         Log.debug(String.format("lastPrice: %s", lastPrice));
-        Log.debug(String.format("marketDataScheduler isShutdown: %s", marketDataScheduler.isShutdown()));
-        Log.debug(String.format("marketDataScheduler isTerminated: %s", marketDataScheduler.isTerminated()));
     }
 }

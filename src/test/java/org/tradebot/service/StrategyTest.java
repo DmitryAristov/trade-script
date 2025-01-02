@@ -10,6 +10,7 @@ import org.tradebot.domain.Imbalance;
 import org.tradebot.domain.Order;
 import org.tradebot.domain.Position;
 import org.tradebot.domain.Precision;
+import org.tradebot.util.TaskManager;
 
 import java.util.Map;
 
@@ -24,6 +25,8 @@ class StrategyTest {
     private RestAPIService apiService;
     @Mock
     private WebSocketService webSocketService;
+    @Mock
+    private TaskManager taskManager;
 
     private final String symbol = "DOGEUSDT";
 
@@ -31,7 +34,7 @@ class StrategyTest {
     void setUp() {
         MockitoAnnotations.openMocks(this);
         when(apiService.getAccountBalance()).thenReturn(100.0);
-        strategy = new Strategy(symbol, 10, apiService, webSocketService);
+        strategy = new Strategy(symbol, 10, apiService, webSocketService, taskManager);
         TradingBot.precision = new Precision(0, 2);
     }
 
@@ -198,12 +201,5 @@ class StrategyTest {
                 argument.getTimeInForce() == null));
         assertEquals(1, strategy.orders.size());
         assertTrue(strategy.orders.keySet().stream().anyMatch("breakeven_stop"::equals));
-    }
-
-    @Test
-    void testStopClosePositionTimer() {
-        strategy.stopClosePositionTimer();
-
-        assertNull(strategy.closePositionTimer);
     }
 }

@@ -1,0 +1,976 @@
+INFO  [2025-01-02 09:28:39] Strategy.<init> :::: strategy parameters:
+    takes modifiers :: [0.35, 0.75]
+    stop modificator :: 0.02
+    position live time :: 4 hours
+INFO  [2025-01-02 09:28:39] Strategy.placeBreakEvenStop :::: set break even stop
+INFO  [2025-01-02 09:28:39] Strategy.placeBreakEvenStop :::: stop market order modified: Order
+   symbol :: DOGEUSDT
+   side :: SELL
+   type :: STOP_MARKET
+   price :: nu$
+   quantity :: nu
+   stopPrice :: 0.31$
+   closePosition :: true
+   reduceOnly :: null
+   newClientOrderId :: breakeven_stop
+   timeInForce :: null
+   createTime :: 1970-01-01 00:00:00
+INFO  [2025-01-02 09:28:39] Strategy.<init> :::: strategy parameters:
+    takes modifiers :: [0.35, 0.75]
+    stop modificator :: 0.02
+    position live time :: 4 hours
+INFO  [2025-01-02 09:28:39] Strategy.openPosition :::: price from order book: 0.3
+INFO  [2025-01-02 09:28:39] Strategy.openPosition :::: account balance: 100.0
+INFO  [2025-01-02 09:28:39] Strategy.createTakeAndStopOrders :::: take profit limit order created: Order
+   symbol :: DOGEUSDT
+   side :: BUY
+   type :: LIMIT
+   price :: 0.27$
+   quantity :: 1650.00
+   stopPrice :: nu$
+   closePosition :: null
+   reduceOnly :: true
+   newClientOrderId :: take_1
+   timeInForce :: GTC
+   createTime :: 1970-01-01 00:00:00
+INFO  [2025-01-02 09:28:39] Strategy.createTakeAndStopOrders :::: take profit limit order created: Order
+   symbol :: DOGEUSDT
+   side :: BUY
+   type :: LIMIT
+   price :: 0.22$
+   quantity :: 1650.00
+   stopPrice :: nu$
+   closePosition :: null
+   reduceOnly :: true
+   newClientOrderId :: take_2
+   timeInForce :: GTC
+   createTime :: 1970-01-01 00:00:00
+INFO  [2025-01-02 09:28:39] Strategy.createTakeAndStopOrders :::: stop market order created: Order
+   symbol :: DOGEUSDT
+   side :: BUY
+   type :: STOP_MARKET
+   price :: nu$
+   quantity :: nu
+   stopPrice :: 0.30$
+   closePosition :: true
+   reduceOnly :: null
+   newClientOrderId :: stop
+   timeInForce :: null
+   createTime :: 1970-01-01 00:00:00
+INFO  [2025-01-02 09:28:39] Strategy.openPosition :::: open position market order created: Order
+   symbol :: DOGEUSDT
+   side :: SELL
+   type :: MARKET
+   price :: nu$
+   quantity :: 3300.00
+   stopPrice :: nu$
+   closePosition :: null
+   reduceOnly :: null
+   newClientOrderId :: position_open_order
+   timeInForce :: null
+   createTime :: 1970-01-01 00:00:01
+INFO  [2025-01-02 09:28:39] Strategy.notifyOrderUpdate :::: new status position_open_order of order FILLED
+INFO  [2025-01-02 09:28:39] Strategy.notifyOrderUpdate :::: open position market order filled
+INFO  [2025-01-02 09:28:39] Strategy.notifyOrderUpdate :::: position will be closed on 2025-01-02 11:28:39
+INFO  [2025-01-02 09:28:39] Strategy.<init> :::: strategy parameters:
+    takes modifiers :: [0.35, 0.75]
+    stop modificator :: 0.02
+    position live time :: 4 hours
+INFO  [2025-01-02 09:28:39] Strategy.closePositionByTimeout :::: closing position by timeout at 2025-01-02 07:28:39
+INFO  [2025-01-02 09:28:39] Strategy.closePositionByTimeout :::: timeout stop order created: Order
+   symbol :: DOGEUSDT
+   side :: SELL
+   type :: MARKET
+   price :: nu$
+   quantity :: nu
+   stopPrice :: nu$
+   closePosition :: true
+   reduceOnly :: null
+   newClientOrderId :: timeout_stop
+   timeInForce :: null
+   createTime :: 1970-01-01 00:00:00
+INFO  [2025-01-02 09:28:39] Strategy.<init> :::: strategy parameters:
+    takes modifiers :: [0.35, 0.75]
+    stop modificator :: 0.02
+    position live time :: 4 hours
+INFO  [2025-01-02 09:28:39] Strategy.openPosition :::: price from order book: 0.3
+INFO  [2025-01-02 09:28:39] Strategy.openPosition :::: account balance: 100.0
+INFO  [2025-01-02 09:28:39] Strategy.createTakeAndStopOrders :::: take profit limit order created: Order
+   symbol :: DOGEUSDT
+   side :: BUY
+   type :: LIMIT
+   price :: 0.30$
+   quantity :: 1650.00
+   stopPrice :: nu$
+   closePosition :: null
+   reduceOnly :: true
+   newClientOrderId :: take_1
+   timeInForce :: GTC
+   createTime :: 1970-01-01 00:00:00
+INFO  [2025-01-02 09:28:39] Strategy.createTakeAndStopOrders :::: take profit limit order created: Order
+   symbol :: DOGEUSDT
+   side :: BUY
+   type :: LIMIT
+   price :: 0.30$
+   quantity :: 1650.00
+   stopPrice :: nu$
+   closePosition :: null
+   reduceOnly :: true
+   newClientOrderId :: take_2
+   timeInForce :: GTC
+   createTime :: 1970-01-01 00:00:00
+INFO  [2025-01-02 09:28:39] Strategy.createTakeAndStopOrders :::: stop market order created: Order
+   symbol :: DOGEUSDT
+   side :: BUY
+   type :: STOP_MARKET
+   price :: nu$
+   quantity :: nu
+   stopPrice :: 0.30$
+   closePosition :: true
+   reduceOnly :: null
+   newClientOrderId :: stop
+   timeInForce :: null
+   createTime :: 1970-01-01 00:00:00
+INFO  [2025-01-02 09:28:39] Strategy.openPosition :::: open position market order created: Order
+   symbol :: DOGEUSDT
+   side :: SELL
+   type :: MARKET
+   price :: nu$
+   quantity :: 3300.00
+   stopPrice :: nu$
+   closePosition :: null
+   reduceOnly :: null
+   newClientOrderId :: position_open_order
+   timeInForce :: null
+   createTime :: 1970-01-01 00:00:01
+INFO  [2025-01-02 09:28:39] Strategy.<init> :::: strategy parameters:
+    takes modifiers :: [0.35, 0.75]
+    stop modificator :: 0.02
+    position live time :: 4 hours
+INFO  [2025-01-02 09:28:39] Strategy.<init> :::: strategy parameters:
+    takes modifiers :: [0.35, 0.75]
+    stop modificator :: 0.02
+    position live time :: 4 hours
+INFO  [2025-01-02 09:28:39] Strategy.openPosition :::: price from order book: 0.3
+INFO  [2025-01-02 09:28:39] Strategy.openPosition :::: account balance: 100.0
+INFO  [2025-01-02 09:28:39] Strategy.createTakeAndStopOrders :::: take profit limit order created: Order
+   symbol :: DOGEUSDT
+   side :: BUY
+   type :: LIMIT
+   price :: 0.00$
+   quantity :: 1650.00
+   stopPrice :: nu$
+   closePosition :: null
+   reduceOnly :: true
+   newClientOrderId :: take_1
+   timeInForce :: GTC
+   createTime :: 1970-01-01 00:00:00
+INFO  [2025-01-02 09:28:39] Strategy.createTakeAndStopOrders :::: take profit limit order created: Order
+   symbol :: DOGEUSDT
+   side :: BUY
+   type :: LIMIT
+   price :: 0.00$
+   quantity :: 1650.00
+   stopPrice :: nu$
+   closePosition :: null
+   reduceOnly :: true
+   newClientOrderId :: take_2
+   timeInForce :: GTC
+   createTime :: 1970-01-01 00:00:00
+INFO  [2025-01-02 09:28:39] Strategy.createTakeAndStopOrders :::: stop market order created: Order
+   symbol :: DOGEUSDT
+   side :: BUY
+   type :: STOP_MARKET
+   price :: nu$
+   quantity :: nu
+   stopPrice :: 0.00$
+   closePosition :: true
+   reduceOnly :: null
+   newClientOrderId :: stop
+   timeInForce :: null
+   createTime :: 1970-01-01 00:00:00
+INFO  [2025-01-02 09:28:39] Strategy.openPosition :::: open position market order created: Order
+   symbol :: DOGEUSDT
+   side :: SELL
+   type :: MARKET
+   price :: nu$
+   quantity :: 3300.00
+   stopPrice :: nu$
+   closePosition :: null
+   reduceOnly :: null
+   newClientOrderId :: position_open_order
+   timeInForce :: null
+   createTime :: 1970-01-01 00:00:01
+INFO  [2025-01-02 09:28:39] Strategy.<init> :::: strategy parameters:
+    takes modifiers :: [0.35, 0.75]
+    stop modificator :: 0.02
+    position live time :: 4 hours
+INFO  [2025-01-02 09:28:39] UserDataHandler.subscribe :::: listener added org.tradebot.listener.UserDataListener$MockitoMock$bvBqLSyY
+DEBUG [2025-01-02 09:28:39] UserDataHandler.onMessage :::: user data stream message: {"o":{"c":"testClientId","X":"FILLED"}}
+DEBUG [2025-01-02 09:28:39] UserDataHandler.onMessage :::: user data stream message: {"o":{"c":"testClientId","X":"FILLED"}}
+INFO  [2025-01-02 09:28:39] UserDataHandler.subscribe :::: listener added org.tradebot.listener.UserDataListener$MockitoMock$bvBqLSyY
+INFO  [2025-01-02 09:28:39] UserDataHandler.unsubscribe :::: listener removed org.tradebot.listener.UserDataListener$MockitoMock$bvBqLSyY
+INFO  [2025-01-02 09:28:39] OrderBookHandler.<init> :::: service created
+INFO  [2025-01-02 09:28:39] OrderBookHandler.<init> :::: service created
+INFO  [2025-01-02 09:28:39] OrderBookHandler.onMessage :::: first order book message received
+INFO  [2025-01-02 09:28:39] OrderBookHandler.<init> :::: service created
+INFO  [2025-01-02 09:28:39] OrderBookHandler.<init> :::: service created
+INFO  [2025-01-02 09:28:39] OrderBookHandler.<init> :::: service created
+INFO  [2025-01-02 09:28:39] OrderBookHandler.<init> :::: service created
+INFO  [2025-01-02 09:28:39] OrderBookHandler.<init> :::: service created
+INFO  [2025-01-02 09:28:39] OrderBookHandler.<init> :::: service created
+INFO  [2025-01-02 09:28:39] OrderBookHandler.subscribe :::: listener added org.tradebot.listener.OrderBookListener$MockitoMock$LwpBY0AI
+INFO  [2025-01-02 09:28:39] OrderBookHandler.unsubscribe :::: listener removed org.tradebot.listener.OrderBookListener$MockitoMock$LwpBY0AI
+INFO  [2025-01-02 09:28:39] OrderBookHandler.<init> :::: service created
+INFO  [2025-01-02 09:28:39] OrderBookHandler.<init> :::: service created
+INFO  [2025-01-02 09:28:39] WebSocketService.<init> :::: service created
+INFO  [2025-01-02 09:28:39] WebSocketService.<init> :::: service created
+INFO  [2025-01-02 09:28:39] WebSocketService.onClose :::: WebSocket closed
+INFO  [2025-01-02 09:28:39] WebSocketService.<init> :::: service created
+INFO  [2025-01-02 09:28:39] WebSocketService.<init> :::: service created
+INFO  [2025-01-02 09:28:39] WebSocketService.stop :::: service stopped
+INFO  [2025-01-02 09:28:39] WebSocketService.<init> :::: service created
+INFO  [2025-01-02 09:28:39] WebSocketService.<init> :::: service created
+INFO  [2025-01-02 09:28:39] WebSocketService.<init> :::: service created
+INFO  [2025-01-02 09:28:39] WebSocketService.<init> :::: service created
+INFO  [2025-01-02 09:28:39] WebSocketService.<init> :::: service created
+INFO  [2025-01-02 09:28:39] WebSocketService.<init> :::: service created
+INFO  [2025-01-02 09:28:39] WebSocketService.openUserDataStream :::: user data stream started
+INFO  [2025-01-02 09:28:39] WebSocketService.<init> :::: service created
+INFO  [2025-01-02 09:28:39] WebSocketService.<init> :::: service created
+INFO  [2025-01-02 09:28:39] WebSocketService.<init> :::: service created
+INFO  [2025-01-02 09:28:39] WebSocketService.<init> :::: service created
+INFO  [2025-01-02 09:28:39] WebSocketService.openUserDataStream :::: user data stream started
+INFO  [2025-01-02 09:28:39] WebSocketService.<init> :::: service created
+INFO  [2025-01-02 09:28:39] WebSocketService.<init> :::: service created
+INFO  [2025-01-02 09:28:39] WebSocketService.onOpen :::: service started
+INFO  [2025-01-02 09:28:39] ImbalanceService.<init> :::: imbalance parameters:
+    complete time modificator :: 0.500
+    potential complete time modificator :: 0.060
+    speed modificator :: 1.0E-7
+    price modificator :: 0.02
+    maximum valid imbalance part when open position :: 0.150
+    minimum imbalance time duration :: 10000s
+    minimum potential complete time :: 2 seconds
+    minimum complete time :: 60 seconds
+    data live time :: 10 minutes
+    large data live time :: 60 minutes
+    large data entry size :: 15 seconds
+    time in the past to check for contr-imbalance :: 60 minutes
+    already returned price imbalance partition on potential endpoint check 0.350
+INFO  [2025-01-02 09:28:39] ImbalanceService.subscribe :::: listener added org.tradebot.listener.ImbalanceStateListener$MockitoMock$kznJfWWL
+INFO  [2025-01-02 09:28:39] ImbalanceService.<init> :::: imbalance parameters:
+    complete time modificator :: 0.500
+    potential complete time modificator :: 0.060
+    speed modificator :: 1.0E-7
+    price modificator :: 0.02
+    maximum valid imbalance part when open position :: 0.150
+    minimum imbalance time duration :: 10000s
+    minimum potential complete time :: 2 seconds
+    minimum complete time :: 60 seconds
+    data live time :: 10 minutes
+    large data live time :: 60 minutes
+    large data entry size :: 15 seconds
+    time in the past to check for contr-imbalance :: 60 minutes
+    already returned price imbalance partition on potential endpoint check 0.350
+INFO  [2025-01-02 09:28:39] ImbalanceService.subscribe :::: listener added org.tradebot.listener.ImbalanceStateListener$MockitoMock$kznJfWWL
+INFO  [2025-01-02 09:28:39] ImbalanceService.<init> :::: imbalance parameters:
+    complete time modificator :: 0.500
+    potential complete time modificator :: 0.060
+    speed modificator :: 1.0E-7
+    price modificator :: 0.02
+    maximum valid imbalance part when open position :: 0.150
+    minimum imbalance time duration :: 10000s
+    minimum potential complete time :: 2 seconds
+    minimum complete time :: 60 seconds
+    data live time :: 10 minutes
+    large data live time :: 60 minutes
+    large data entry size :: 15 seconds
+    time in the past to check for contr-imbalance :: 60 minutes
+    already returned price imbalance partition on potential endpoint check 0.350
+INFO  [2025-01-02 09:28:39] ImbalanceService.subscribe :::: listener added org.tradebot.listener.ImbalanceStateListener$MockitoMock$kznJfWWL
+INFO  [2025-01-02 09:28:39] ImbalanceService.findImbalanceStart :::: filtering from 1 imbalances with a largest size: 2100.00
+INFO  [2025-01-02 09:28:39] ImbalanceService.findImbalanceStart :::: found imbalance: Imbalance
+   startTime :: 1970-01-01 00:00:00
+   startPrice :: 97900.00$
+   endTime :: 1970-01-01 00:00:20
+   endPrice :: 100000.00$
+   computedDuration :: 0.00. let's check is it valid?
+INFO  [2025-01-02 09:28:39] ImbalanceService.isValid :::: is there is local price extrema between start and end of imbalance? false
+INFO  [2025-01-02 09:28:39] ImbalanceService.isValid :::: is it a local price extrema between start and end? false
+INFO  [2025-01-02 09:28:39] ImbalanceService.isValid :::: is it a contr imbalance?: false
+INFO  [2025-01-02 09:28:39] ImbalanceService.findImbalanceStart :::: UP started: Imbalance
+   startTime :: 1970-01-01 00:00:00
+   startPrice :: 97900.00$
+   endTime :: 1970-01-01 00:00:20
+   endPrice :: 100000.00$
+   computedDuration :: 0.00 on 1970-01-01 00:00:20
+INFO  [2025-01-02 09:28:39] ImbalanceService.<init> :::: imbalance parameters:
+    complete time modificator :: 0.500
+    potential complete time modificator :: 0.060
+    speed modificator :: 1.0E-7
+    price modificator :: 0.02
+    maximum valid imbalance part when open position :: 0.150
+    minimum imbalance time duration :: 10000s
+    minimum potential complete time :: 2 seconds
+    minimum complete time :: 60 seconds
+    data live time :: 10 minutes
+    large data live time :: 60 minutes
+    large data entry size :: 15 seconds
+    time in the past to check for contr-imbalance :: 60 minutes
+    already returned price imbalance partition on potential endpoint check 0.350
+INFO  [2025-01-02 09:28:39] ImbalanceService.subscribe :::: listener added org.tradebot.listener.ImbalanceStateListener$MockitoMock$kznJfWWL
+INFO  [2025-01-02 09:28:39] ImbalanceService.findImbalanceStart :::: filtering from 1 imbalances with a largest size: 2100.00
+INFO  [2025-01-02 09:28:39] ImbalanceService.findImbalanceStart :::: found imbalance: Imbalance
+   startTime :: 1970-01-01 00:00:00
+   startPrice :: 97900.00$
+   endTime :: 1970-01-01 00:00:20
+   endPrice :: 100000.00$
+   computedDuration :: 0.00. let's check is it valid?
+INFO  [2025-01-02 09:28:39] ImbalanceService.isValid :::: is there is local price extrema between start and end of imbalance? false
+INFO  [2025-01-02 09:28:39] ImbalanceService.isValid :::: is it a local price extrema between start and end? false
+INFO  [2025-01-02 09:28:39] ImbalanceService.isValid :::: is it a contr imbalance?: false
+INFO  [2025-01-02 09:28:39] ImbalanceService.findImbalanceStart :::: UP started: Imbalance
+   startTime :: 1970-01-01 00:00:00
+   startPrice :: 97900.00$
+   endTime :: 1970-01-01 00:00:20
+   endPrice :: 100000.00$
+   computedDuration :: 0.00 on 1970-01-01 00:00:20
+INFO  [2025-01-02 09:28:39] ImbalanceService.checkPotentialEndPointCondition :::: computed duration: 1145.5 < 2000
+INFO  [2025-01-02 09:28:39] ImbalanceService.checkPotentialEndPointCondition :::: possible entry point with computed possible duration: 1145.5 (mills)
+INFO  [2025-01-02 09:28:39] ImbalanceService.<init> :::: imbalance parameters:
+    complete time modificator :: 0.500
+    potential complete time modificator :: 0.060
+    speed modificator :: 1.0E-7
+    price modificator :: 0.02
+    maximum valid imbalance part when open position :: 0.150
+    minimum imbalance time duration :: 10000s
+    minimum potential complete time :: 2 seconds
+    minimum complete time :: 60 seconds
+    data live time :: 10 minutes
+    large data live time :: 60 minutes
+    large data entry size :: 15 seconds
+    time in the past to check for contr-imbalance :: 60 minutes
+    already returned price imbalance partition on potential endpoint check 0.350
+INFO  [2025-01-02 09:28:39] ImbalanceService.subscribe :::: listener added org.tradebot.listener.ImbalanceStateListener$MockitoMock$kznJfWWL
+INFO  [2025-01-02 09:28:39] ImbalanceService.<init> :::: imbalance parameters:
+    complete time modificator :: 0.500
+    potential complete time modificator :: 0.060
+    speed modificator :: 1.0E-7
+    price modificator :: 0.02
+    maximum valid imbalance part when open position :: 0.150
+    minimum imbalance time duration :: 10000s
+    minimum potential complete time :: 2 seconds
+    minimum complete time :: 60 seconds
+    data live time :: 10 minutes
+    large data live time :: 60 minutes
+    large data entry size :: 15 seconds
+    time in the past to check for contr-imbalance :: 60 minutes
+    already returned price imbalance partition on potential endpoint check 0.350
+INFO  [2025-01-02 09:28:39] ImbalanceService.subscribe :::: listener added org.tradebot.listener.ImbalanceStateListener$MockitoMock$kznJfWWL
+INFO  [2025-01-02 09:28:39] ImbalanceService.findImbalanceStart :::: filtering from 1 imbalances with a largest size: 2100.00
+INFO  [2025-01-02 09:28:39] ImbalanceService.findImbalanceStart :::: found imbalance: Imbalance
+   startTime :: 1970-01-01 00:00:00
+   startPrice :: 97900.00$
+   endTime :: 1970-01-01 00:00:20
+   endPrice :: 100000.00$
+   computedDuration :: 0.00. let's check is it valid?
+INFO  [2025-01-02 09:28:39] ImbalanceService.isValid :::: is there is local price extrema between start and end of imbalance? false
+INFO  [2025-01-02 09:28:39] ImbalanceService.isValid :::: is it a local price extrema between start and end? false
+INFO  [2025-01-02 09:28:39] ImbalanceService.isValid :::: is it a contr imbalance?: false
+INFO  [2025-01-02 09:28:39] ImbalanceService.findImbalanceStart :::: UP started: Imbalance
+   startTime :: 1970-01-01 00:00:00
+   startPrice :: 97900.00$
+   endTime :: 1970-01-01 00:00:20
+   endPrice :: 100000.00$
+   computedDuration :: 0.00 on 1970-01-01 00:00:20
+INFO  [2025-01-02 09:28:39] ImbalanceService.<init> :::: imbalance parameters:
+    complete time modificator :: 0.500
+    potential complete time modificator :: 0.060
+    speed modificator :: 1.0E-7
+    price modificator :: 0.02
+    maximum valid imbalance part when open position :: 0.150
+    minimum imbalance time duration :: 10000s
+    minimum potential complete time :: 2 seconds
+    minimum complete time :: 60 seconds
+    data live time :: 10 minutes
+    large data live time :: 60 minutes
+    large data entry size :: 15 seconds
+    time in the past to check for contr-imbalance :: 60 minutes
+    already returned price imbalance partition on potential endpoint check 0.350
+INFO  [2025-01-02 09:28:39] ImbalanceService.subscribe :::: listener added org.tradebot.listener.ImbalanceStateListener$MockitoMock$kznJfWWL
+INFO  [2025-01-02 09:28:39] ImbalanceService.findImbalanceStart :::: filtering from 1 imbalances with a largest size: 2100.00
+INFO  [2025-01-02 09:28:39] ImbalanceService.findImbalanceStart :::: found imbalance: Imbalance
+   startTime :: 1970-01-01 00:00:00
+   startPrice :: 97900.00$
+   endTime :: 1970-01-01 00:00:20
+   endPrice :: 100000.00$
+   computedDuration :: 0.00. let's check is it valid?
+INFO  [2025-01-02 09:28:39] ImbalanceService.isValid :::: is there is local price extrema between start and end of imbalance? false
+INFO  [2025-01-02 09:28:39] ImbalanceService.isValid :::: is it a local price extrema between start and end? false
+INFO  [2025-01-02 09:28:39] ImbalanceService.isValid :::: is it a contr imbalance?: false
+INFO  [2025-01-02 09:28:39] ImbalanceService.findImbalanceStart :::: UP started: Imbalance
+   startTime :: 1970-01-01 00:00:00
+   startPrice :: 97900.00$
+   endTime :: 1970-01-01 00:00:20
+   endPrice :: 100000.00$
+   computedDuration :: 0.00 on 1970-01-01 00:00:20
+INFO  [2025-01-02 09:28:39] ImbalanceService.unsubscribe :::: listener removed org.tradebot.listener.ImbalanceStateListener$MockitoMock$kznJfWWL
+INFO  [2025-01-02 09:28:39] ImbalanceService.checkPotentialEndPointCondition :::: computed duration: 1145.5 < 2000
+INFO  [2025-01-02 09:28:39] ImbalanceService.checkPotentialEndPointCondition :::: possible entry point with computed possible duration: 1145.5 (mills)
+INFO  [2025-01-02 09:28:39] ImbalanceService.<init> :::: imbalance parameters:
+    complete time modificator :: 0.500
+    potential complete time modificator :: 0.060
+    speed modificator :: 1.0E-7
+    price modificator :: 0.02
+    maximum valid imbalance part when open position :: 0.150
+    minimum imbalance time duration :: 10000s
+    minimum potential complete time :: 2 seconds
+    minimum complete time :: 60 seconds
+    data live time :: 10 minutes
+    large data live time :: 60 minutes
+    large data entry size :: 15 seconds
+    time in the past to check for contr-imbalance :: 60 minutes
+    already returned price imbalance partition on potential endpoint check 0.350
+INFO  [2025-01-02 09:28:39] ImbalanceService.subscribe :::: listener added org.tradebot.listener.ImbalanceStateListener$MockitoMock$kznJfWWL
+INFO  [2025-01-02 09:28:39] ImbalanceService.findImbalanceStart :::: filtering from 1 imbalances with a largest size: 2100.00
+INFO  [2025-01-02 09:28:39] ImbalanceService.findImbalanceStart :::: found imbalance: Imbalance
+   startTime :: 1970-01-01 00:00:00
+   startPrice :: 97900.00$
+   endTime :: 1970-01-01 00:00:20
+   endPrice :: 100000.00$
+   computedDuration :: 0.00. let's check is it valid?
+INFO  [2025-01-02 09:28:39] ImbalanceService.isValid :::: is there is local price extrema between start and end of imbalance? false
+INFO  [2025-01-02 09:28:39] ImbalanceService.isValid :::: is it a local price extrema between start and end? false
+INFO  [2025-01-02 09:28:39] ImbalanceService.isValid :::: is it a contr imbalance?: false
+INFO  [2025-01-02 09:28:39] ImbalanceService.findImbalanceStart :::: UP started: Imbalance
+   startTime :: 1970-01-01 00:00:00
+   startPrice :: 97900.00$
+   endTime :: 1970-01-01 00:00:20
+   endPrice :: 100000.00$
+   computedDuration :: 0.00 on 1970-01-01 00:00:20
+INFO  [2025-01-02 09:28:39] ImbalanceService.checkPotentialEndPointCondition :::: computed duration: 1145.5 < 2000
+INFO  [2025-01-02 09:28:39] ImbalanceService.checkPotentialEndPointCondition :::: possible entry point with computed possible duration: 1145.5 (mills)
+INFO  [2025-01-02 09:28:39] ImbalanceService.checkCompleteCondition :::: UP completed: Imbalance
+   startTime :: 1970-01-01 00:00:00
+   startPrice :: 97900.00$
+   endTime :: 1970-01-01 00:00:21
+   endPrice :: 100100.00$
+   computedDuration :: 1145.45 on 1970-01-01 00:01:22
+INFO  [2025-01-02 09:28:40] TradeHandler.<init> :::: service started
+INFO  [2025-01-02 09:28:40] TradeHandler.<init> :::: service started
+INFO  [2025-01-02 09:28:40] TradeHandler.<init> :::: service started
+INFO  [2025-01-02 09:28:40] TradeHandler.<init> :::: service started
+INFO  [2025-01-02 09:28:40] TradeHandler.<init> :::: service started
+INFO  [2025-01-02 09:28:40] TradeHandler.<init> :::: service started
+INFO  [2025-01-02 09:28:40] TradeHandler.subscribe :::: listener added org.tradebot.listener.MarketDataListener$MockitoMock$d6fZ1lgf
+INFO  [2025-01-02 09:28:40] TradeHandler.<init> :::: service started
+INFO  [2025-01-02 09:28:40] TradeHandler.<init> :::: service started
+INFO  [2025-01-02 09:28:40] TradeHandler.subscribe :::: listener added org.tradebot.listener.MarketDataListener$MockitoMock$d6fZ1lgf
+INFO  [2025-01-02 09:28:40] TradeHandler.unsubscribe :::: listener removed org.tradebot.listener.MarketDataListener$MockitoMock$d6fZ1lgf
+INFO  [2025-01-02 09:28:40] TradeHandler.<init> :::: service started
+INFO  [2025-01-02 09:28:40] TradeHandler.<init> :::: service started
+INFO  [2025-01-02 09:28:40] TradeHandler.subscribe :::: listener added org.tradebot.listener.MarketDataListener$MockitoMock$d6fZ1lgf
+INFO  [2025-01-02 09:28:40] TradeHandler.<init> :::: service started
+INFO  [2025-01-02 09:28:40] TradeHandler.<init> :::: service started
+INFO  [2025-01-02 09:33:34] TaskManager.create :::: task 'task_id' scheduled
+INFO  [2025-01-02 09:34:44] TaskManager.create :::: task 'task_1' scheduled
+INFO  [2025-01-02 09:34:44] TaskManager.create :::: task 'task_2' scheduled
+INFO  [2025-01-02 09:34:44] TaskManager.lambda$stopAll$0 :::: task 'task_2' stopped
+INFO  [2025-01-02 09:34:44] TaskManager.lambda$stopAll$0 :::: task 'task_1' stopped
+INFO  [2025-01-02 09:34:44] TaskManager.create :::: task 'task_id' scheduled
+INFO  [2025-01-02 09:34:44] TaskManager.create :::: task 'task_id' scheduled
+INFO  [2025-01-02 09:34:44] TaskManager.stop :::: task 'task_id' stopped
+INFO  [2025-01-02 09:37:49] TaskManager.create :::: task 'task_1' scheduled
+INFO  [2025-01-02 09:37:49] TaskManager.create :::: task 'task_2' scheduled
+INFO  [2025-01-02 09:37:49] TaskManager.lambda$stopAll$0 :::: task 'task_2' stopped
+INFO  [2025-01-02 09:37:49] TaskManager.lambda$stopAll$0 :::: task 'task_1' stopped
+INFO  [2025-01-02 09:37:49] TaskManager.create :::: task 'task_id' scheduled
+INFO  [2025-01-02 09:37:49] TaskManager.create :::: task 'task_id' scheduled
+INFO  [2025-01-02 09:37:49] TaskManager.create :::: task 'task_id' scheduled
+INFO  [2025-01-02 09:37:49] TaskManager.create :::: task 'task_id' scheduled
+INFO  [2025-01-02 09:37:49] TaskManager.stop :::: task 'task_id' stopped
+INFO  [2025-01-02 09:38:35] Strategy.<init> :::: strategy parameters:
+    takes modifiers :: [0.35, 0.75]
+    stop modificator :: 0.02
+    position live time :: 4 hours
+INFO  [2025-01-02 09:38:35] Strategy.placeBreakEvenStop :::: set break even stop
+INFO  [2025-01-02 09:38:35] Strategy.placeBreakEvenStop :::: stop market order modified: Order
+   symbol :: DOGEUSDT
+   side :: SELL
+   type :: STOP_MARKET
+   price :: nu$
+   quantity :: nu
+   stopPrice :: 0.31$
+   closePosition :: true
+   reduceOnly :: null
+   newClientOrderId :: breakeven_stop
+   timeInForce :: null
+   createTime :: 1970-01-01 00:00:00
+INFO  [2025-01-02 09:38:35] Strategy.<init> :::: strategy parameters:
+    takes modifiers :: [0.35, 0.75]
+    stop modificator :: 0.02
+    position live time :: 4 hours
+INFO  [2025-01-02 09:38:35] Strategy.openPosition :::: price from order book: 0.3
+INFO  [2025-01-02 09:38:35] Strategy.openPosition :::: account balance: 100.0
+INFO  [2025-01-02 09:38:35] Strategy.createTakeAndStopOrders :::: take profit limit order created: Order
+   symbol :: DOGEUSDT
+   side :: BUY
+   type :: LIMIT
+   price :: 0.27$
+   quantity :: 1650.00
+   stopPrice :: nu$
+   closePosition :: null
+   reduceOnly :: true
+   newClientOrderId :: take_1
+   timeInForce :: GTC
+   createTime :: 1970-01-01 00:00:00
+INFO  [2025-01-02 09:38:35] Strategy.createTakeAndStopOrders :::: take profit limit order created: Order
+   symbol :: DOGEUSDT
+   side :: BUY
+   type :: LIMIT
+   price :: 0.22$
+   quantity :: 1650.00
+   stopPrice :: nu$
+   closePosition :: null
+   reduceOnly :: true
+   newClientOrderId :: take_2
+   timeInForce :: GTC
+   createTime :: 1970-01-01 00:00:00
+INFO  [2025-01-02 09:38:35] Strategy.createTakeAndStopOrders :::: stop market order created: Order
+   symbol :: DOGEUSDT
+   side :: BUY
+   type :: STOP_MARKET
+   price :: nu$
+   quantity :: nu
+   stopPrice :: 0.30$
+   closePosition :: true
+   reduceOnly :: null
+   newClientOrderId :: stop
+   timeInForce :: null
+   createTime :: 1970-01-01 00:00:00
+INFO  [2025-01-02 09:38:35] Strategy.openPosition :::: open position market order created: Order
+   symbol :: DOGEUSDT
+   side :: SELL
+   type :: MARKET
+   price :: nu$
+   quantity :: 3300.00
+   stopPrice :: nu$
+   closePosition :: null
+   reduceOnly :: null
+   newClientOrderId :: position_open_order
+   timeInForce :: null
+   createTime :: 1970-01-01 00:00:01
+INFO  [2025-01-02 09:38:35] Strategy.notifyOrderUpdate :::: new status position_open_order of order FILLED
+INFO  [2025-01-02 09:38:35] Strategy.notifyOrderUpdate :::: open position market order filled
+INFO  [2025-01-02 09:38:35] Strategy.notifyOrderUpdate :::: position will be closed on 2025-01-02 11:38:35
+INFO  [2025-01-02 09:38:35] Strategy.<init> :::: strategy parameters:
+    takes modifiers :: [0.35, 0.75]
+    stop modificator :: 0.02
+    position live time :: 4 hours
+INFO  [2025-01-02 09:38:35] Strategy.closePositionByTimeout :::: closing position by timeout at 2025-01-02 07:38:35
+INFO  [2025-01-02 09:38:35] Strategy.closePositionByTimeout :::: timeout stop order created: Order
+   symbol :: DOGEUSDT
+   side :: SELL
+   type :: MARKET
+   price :: nu$
+   quantity :: nu
+   stopPrice :: nu$
+   closePosition :: true
+   reduceOnly :: null
+   newClientOrderId :: timeout_stop
+   timeInForce :: null
+   createTime :: 1970-01-01 00:00:00
+INFO  [2025-01-02 09:38:35] Strategy.<init> :::: strategy parameters:
+    takes modifiers :: [0.35, 0.75]
+    stop modificator :: 0.02
+    position live time :: 4 hours
+INFO  [2025-01-02 09:38:35] Strategy.openPosition :::: price from order book: 0.3
+INFO  [2025-01-02 09:38:35] Strategy.openPosition :::: account balance: 100.0
+INFO  [2025-01-02 09:38:35] Strategy.createTakeAndStopOrders :::: take profit limit order created: Order
+   symbol :: DOGEUSDT
+   side :: BUY
+   type :: LIMIT
+   price :: 0.30$
+   quantity :: 1650.00
+   stopPrice :: nu$
+   closePosition :: null
+   reduceOnly :: true
+   newClientOrderId :: take_1
+   timeInForce :: GTC
+   createTime :: 1970-01-01 00:00:00
+INFO  [2025-01-02 09:38:35] Strategy.createTakeAndStopOrders :::: take profit limit order created: Order
+   symbol :: DOGEUSDT
+   side :: BUY
+   type :: LIMIT
+   price :: 0.30$
+   quantity :: 1650.00
+   stopPrice :: nu$
+   closePosition :: null
+   reduceOnly :: true
+   newClientOrderId :: take_2
+   timeInForce :: GTC
+   createTime :: 1970-01-01 00:00:00
+INFO  [2025-01-02 09:38:35] Strategy.createTakeAndStopOrders :::: stop market order created: Order
+   symbol :: DOGEUSDT
+   side :: BUY
+   type :: STOP_MARKET
+   price :: nu$
+   quantity :: nu
+   stopPrice :: 0.30$
+   closePosition :: true
+   reduceOnly :: null
+   newClientOrderId :: stop
+   timeInForce :: null
+   createTime :: 1970-01-01 00:00:00
+INFO  [2025-01-02 09:38:35] Strategy.openPosition :::: open position market order created: Order
+   symbol :: DOGEUSDT
+   side :: SELL
+   type :: MARKET
+   price :: nu$
+   quantity :: 3300.00
+   stopPrice :: nu$
+   closePosition :: null
+   reduceOnly :: null
+   newClientOrderId :: position_open_order
+   timeInForce :: null
+   createTime :: 1970-01-01 00:00:01
+INFO  [2025-01-02 09:38:35] Strategy.<init> :::: strategy parameters:
+    takes modifiers :: [0.35, 0.75]
+    stop modificator :: 0.02
+    position live time :: 4 hours
+INFO  [2025-01-02 09:38:35] Strategy.<init> :::: strategy parameters:
+    takes modifiers :: [0.35, 0.75]
+    stop modificator :: 0.02
+    position live time :: 4 hours
+INFO  [2025-01-02 09:38:35] Strategy.openPosition :::: price from order book: 0.3
+INFO  [2025-01-02 09:38:35] Strategy.openPosition :::: account balance: 100.0
+INFO  [2025-01-02 09:38:35] Strategy.createTakeAndStopOrders :::: take profit limit order created: Order
+   symbol :: DOGEUSDT
+   side :: BUY
+   type :: LIMIT
+   price :: 0.00$
+   quantity :: 1650.00
+   stopPrice :: nu$
+   closePosition :: null
+   reduceOnly :: true
+   newClientOrderId :: take_1
+   timeInForce :: GTC
+   createTime :: 1970-01-01 00:00:00
+INFO  [2025-01-02 09:38:35] Strategy.createTakeAndStopOrders :::: take profit limit order created: Order
+   symbol :: DOGEUSDT
+   side :: BUY
+   type :: LIMIT
+   price :: 0.00$
+   quantity :: 1650.00
+   stopPrice :: nu$
+   closePosition :: null
+   reduceOnly :: true
+   newClientOrderId :: take_2
+   timeInForce :: GTC
+   createTime :: 1970-01-01 00:00:00
+INFO  [2025-01-02 09:38:35] Strategy.createTakeAndStopOrders :::: stop market order created: Order
+   symbol :: DOGEUSDT
+   side :: BUY
+   type :: STOP_MARKET
+   price :: nu$
+   quantity :: nu
+   stopPrice :: 0.00$
+   closePosition :: true
+   reduceOnly :: null
+   newClientOrderId :: stop
+   timeInForce :: null
+   createTime :: 1970-01-01 00:00:00
+INFO  [2025-01-02 09:38:35] Strategy.openPosition :::: open position market order created: Order
+   symbol :: DOGEUSDT
+   side :: SELL
+   type :: MARKET
+   price :: nu$
+   quantity :: 3300.00
+   stopPrice :: nu$
+   closePosition :: null
+   reduceOnly :: null
+   newClientOrderId :: position_open_order
+   timeInForce :: null
+   createTime :: 1970-01-01 00:00:01
+INFO  [2025-01-02 09:38:35] Strategy.<init> :::: strategy parameters:
+    takes modifiers :: [0.35, 0.75]
+    stop modificator :: 0.02
+    position live time :: 4 hours
+INFO  [2025-01-02 09:38:35] TaskManager.create :::: task 'task_1' scheduled
+INFO  [2025-01-02 09:38:35] TaskManager.create :::: task 'task_2' scheduled
+INFO  [2025-01-02 09:38:35] TaskManager.lambda$stopAll$0 :::: task 'task_2' stopped
+INFO  [2025-01-02 09:38:35] TaskManager.lambda$stopAll$0 :::: task 'task_1' stopped
+INFO  [2025-01-02 09:38:35] TaskManager.create :::: task 'task_id' scheduled
+INFO  [2025-01-02 09:38:35] TaskManager.create :::: task 'task_id' scheduled
+INFO  [2025-01-02 09:38:35] TaskManager.create :::: task 'task_id' scheduled
+INFO  [2025-01-02 09:38:35] TaskManager.create :::: task 'task_id' scheduled
+INFO  [2025-01-02 09:38:35] TaskManager.stop :::: task 'task_id' stopped
+INFO  [2025-01-02 09:38:35] UserDataHandler.subscribe :::: listener added org.tradebot.listener.UserDataListener$MockitoMock$xLHgeVrH
+DEBUG [2025-01-02 09:38:35] UserDataHandler.onMessage :::: user data stream message: {"o":{"c":"testClientId","X":"FILLED"}}
+DEBUG [2025-01-02 09:38:35] UserDataHandler.onMessage :::: user data stream message: {"o":{"c":"testClientId","X":"FILLED"}}
+INFO  [2025-01-02 09:38:35] UserDataHandler.subscribe :::: listener added org.tradebot.listener.UserDataListener$MockitoMock$xLHgeVrH
+INFO  [2025-01-02 09:38:35] UserDataHandler.unsubscribe :::: listener removed org.tradebot.listener.UserDataListener$MockitoMock$xLHgeVrH
+INFO  [2025-01-02 09:38:35] OrderBookHandler.<init> :::: service created
+INFO  [2025-01-02 09:38:35] OrderBookHandler.<init> :::: service created
+INFO  [2025-01-02 09:38:35] OrderBookHandler.onMessage :::: first order book message received
+INFO  [2025-01-02 09:38:35] OrderBookHandler.<init> :::: service created
+INFO  [2025-01-02 09:38:35] OrderBookHandler.<init> :::: service created
+INFO  [2025-01-02 09:38:35] OrderBookHandler.<init> :::: service created
+INFO  [2025-01-02 09:38:35] OrderBookHandler.<init> :::: service created
+INFO  [2025-01-02 09:38:35] OrderBookHandler.<init> :::: service created
+INFO  [2025-01-02 09:38:35] OrderBookHandler.<init> :::: service created
+INFO  [2025-01-02 09:38:35] OrderBookHandler.subscribe :::: listener added org.tradebot.listener.OrderBookListener$MockitoMock$cLrb0wVz
+INFO  [2025-01-02 09:38:35] OrderBookHandler.unsubscribe :::: listener removed org.tradebot.listener.OrderBookListener$MockitoMock$cLrb0wVz
+INFO  [2025-01-02 09:38:35] OrderBookHandler.<init> :::: service created
+INFO  [2025-01-02 09:38:35] OrderBookHandler.<init> :::: service created
+INFO  [2025-01-02 09:38:35] WebSocketService.<init> :::: service created
+INFO  [2025-01-02 09:38:35] WebSocketService.<init> :::: service created
+INFO  [2025-01-02 09:38:35] WebSocketService.onClose :::: WebSocket closed
+INFO  [2025-01-02 09:38:35] WebSocketService.<init> :::: service created
+INFO  [2025-01-02 09:38:35] WebSocketService.<init> :::: service created
+INFO  [2025-01-02 09:38:35] WebSocketService.stop :::: service stopped
+INFO  [2025-01-02 09:38:35] WebSocketService.<init> :::: service created
+INFO  [2025-01-02 09:38:35] WebSocketService.<init> :::: service created
+INFO  [2025-01-02 09:38:35] WebSocketService.<init> :::: service created
+INFO  [2025-01-02 09:38:35] WebSocketService.<init> :::: service created
+INFO  [2025-01-02 09:38:35] WebSocketService.<init> :::: service created
+INFO  [2025-01-02 09:38:35] WebSocketService.<init> :::: service created
+INFO  [2025-01-02 09:38:35] WebSocketService.openUserDataStream :::: user data stream started
+INFO  [2025-01-02 09:38:35] WebSocketService.<init> :::: service created
+INFO  [2025-01-02 09:38:35] WebSocketService.<init> :::: service created
+INFO  [2025-01-02 09:38:35] WebSocketService.<init> :::: service created
+INFO  [2025-01-02 09:38:35] WebSocketService.<init> :::: service created
+INFO  [2025-01-02 09:38:35] WebSocketService.openUserDataStream :::: user data stream started
+INFO  [2025-01-02 09:38:35] WebSocketService.<init> :::: service created
+INFO  [2025-01-02 09:38:35] WebSocketService.<init> :::: service created
+INFO  [2025-01-02 09:38:35] WebSocketService.onOpen :::: service started
+INFO  [2025-01-02 09:38:35] ImbalanceService.<init> :::: imbalance parameters:
+    complete time modificator :: 0.500
+    potential complete time modificator :: 0.060
+    speed modificator :: 1.0E-7
+    price modificator :: 0.02
+    maximum valid imbalance part when open position :: 0.150
+    minimum imbalance time duration :: 10000s
+    minimum potential complete time :: 2 seconds
+    minimum complete time :: 60 seconds
+    data live time :: 10 minutes
+    large data live time :: 60 minutes
+    large data entry size :: 15 seconds
+    time in the past to check for contr-imbalance :: 60 minutes
+    already returned price imbalance partition on potential endpoint check 0.350
+INFO  [2025-01-02 09:38:35] ImbalanceService.subscribe :::: listener added org.tradebot.listener.ImbalanceStateListener$MockitoMock$HO5OIhHu
+INFO  [2025-01-02 09:38:35] ImbalanceService.<init> :::: imbalance parameters:
+    complete time modificator :: 0.500
+    potential complete time modificator :: 0.060
+    speed modificator :: 1.0E-7
+    price modificator :: 0.02
+    maximum valid imbalance part when open position :: 0.150
+    minimum imbalance time duration :: 10000s
+    minimum potential complete time :: 2 seconds
+    minimum complete time :: 60 seconds
+    data live time :: 10 minutes
+    large data live time :: 60 minutes
+    large data entry size :: 15 seconds
+    time in the past to check for contr-imbalance :: 60 minutes
+    already returned price imbalance partition on potential endpoint check 0.350
+INFO  [2025-01-02 09:38:35] ImbalanceService.subscribe :::: listener added org.tradebot.listener.ImbalanceStateListener$MockitoMock$HO5OIhHu
+INFO  [2025-01-02 09:38:35] ImbalanceService.<init> :::: imbalance parameters:
+    complete time modificator :: 0.500
+    potential complete time modificator :: 0.060
+    speed modificator :: 1.0E-7
+    price modificator :: 0.02
+    maximum valid imbalance part when open position :: 0.150
+    minimum imbalance time duration :: 10000s
+    minimum potential complete time :: 2 seconds
+    minimum complete time :: 60 seconds
+    data live time :: 10 minutes
+    large data live time :: 60 minutes
+    large data entry size :: 15 seconds
+    time in the past to check for contr-imbalance :: 60 minutes
+    already returned price imbalance partition on potential endpoint check 0.350
+INFO  [2025-01-02 09:38:35] ImbalanceService.subscribe :::: listener added org.tradebot.listener.ImbalanceStateListener$MockitoMock$HO5OIhHu
+INFO  [2025-01-02 09:38:35] ImbalanceService.findImbalanceStart :::: filtering from 1 imbalances with a largest size: 2100.00
+INFO  [2025-01-02 09:38:35] ImbalanceService.findImbalanceStart :::: found imbalance: Imbalance
+   startTime :: 1970-01-01 00:00:00
+   startPrice :: 97900.00$
+   endTime :: 1970-01-01 00:00:20
+   endPrice :: 100000.00$
+   computedDuration :: 0.00. let's check is it valid?
+INFO  [2025-01-02 09:38:35] ImbalanceService.isValid :::: is there is local price extrema between start and end of imbalance? false
+INFO  [2025-01-02 09:38:35] ImbalanceService.isValid :::: is it a local price extrema between start and end? false
+INFO  [2025-01-02 09:38:35] ImbalanceService.isValid :::: is it a contr imbalance?: false
+INFO  [2025-01-02 09:38:35] ImbalanceService.findImbalanceStart :::: UP started: Imbalance
+   startTime :: 1970-01-01 00:00:00
+   startPrice :: 97900.00$
+   endTime :: 1970-01-01 00:00:20
+   endPrice :: 100000.00$
+   computedDuration :: 0.00 on 1970-01-01 00:00:20
+INFO  [2025-01-02 09:38:35] ImbalanceService.<init> :::: imbalance parameters:
+    complete time modificator :: 0.500
+    potential complete time modificator :: 0.060
+    speed modificator :: 1.0E-7
+    price modificator :: 0.02
+    maximum valid imbalance part when open position :: 0.150
+    minimum imbalance time duration :: 10000s
+    minimum potential complete time :: 2 seconds
+    minimum complete time :: 60 seconds
+    data live time :: 10 minutes
+    large data live time :: 60 minutes
+    large data entry size :: 15 seconds
+    time in the past to check for contr-imbalance :: 60 minutes
+    already returned price imbalance partition on potential endpoint check 0.350
+INFO  [2025-01-02 09:38:35] ImbalanceService.subscribe :::: listener added org.tradebot.listener.ImbalanceStateListener$MockitoMock$HO5OIhHu
+INFO  [2025-01-02 09:38:35] ImbalanceService.findImbalanceStart :::: filtering from 1 imbalances with a largest size: 2100.00
+INFO  [2025-01-02 09:38:35] ImbalanceService.findImbalanceStart :::: found imbalance: Imbalance
+   startTime :: 1970-01-01 00:00:00
+   startPrice :: 97900.00$
+   endTime :: 1970-01-01 00:00:20
+   endPrice :: 100000.00$
+   computedDuration :: 0.00. let's check is it valid?
+INFO  [2025-01-02 09:38:35] ImbalanceService.isValid :::: is there is local price extrema between start and end of imbalance? false
+INFO  [2025-01-02 09:38:35] ImbalanceService.isValid :::: is it a local price extrema between start and end? false
+INFO  [2025-01-02 09:38:35] ImbalanceService.isValid :::: is it a contr imbalance?: false
+INFO  [2025-01-02 09:38:35] ImbalanceService.findImbalanceStart :::: UP started: Imbalance
+   startTime :: 1970-01-01 00:00:00
+   startPrice :: 97900.00$
+   endTime :: 1970-01-01 00:00:20
+   endPrice :: 100000.00$
+   computedDuration :: 0.00 on 1970-01-01 00:00:20
+INFO  [2025-01-02 09:38:35] ImbalanceService.checkPotentialEndPointCondition :::: computed duration: 1145.5 < 2000
+INFO  [2025-01-02 09:38:35] ImbalanceService.checkPotentialEndPointCondition :::: possible entry point with computed possible duration: 1145.5 (mills)
+INFO  [2025-01-02 09:38:35] ImbalanceService.<init> :::: imbalance parameters:
+    complete time modificator :: 0.500
+    potential complete time modificator :: 0.060
+    speed modificator :: 1.0E-7
+    price modificator :: 0.02
+    maximum valid imbalance part when open position :: 0.150
+    minimum imbalance time duration :: 10000s
+    minimum potential complete time :: 2 seconds
+    minimum complete time :: 60 seconds
+    data live time :: 10 minutes
+    large data live time :: 60 minutes
+    large data entry size :: 15 seconds
+    time in the past to check for contr-imbalance :: 60 minutes
+    already returned price imbalance partition on potential endpoint check 0.350
+INFO  [2025-01-02 09:38:35] ImbalanceService.subscribe :::: listener added org.tradebot.listener.ImbalanceStateListener$MockitoMock$HO5OIhHu
+INFO  [2025-01-02 09:38:35] ImbalanceService.<init> :::: imbalance parameters:
+    complete time modificator :: 0.500
+    potential complete time modificator :: 0.060
+    speed modificator :: 1.0E-7
+    price modificator :: 0.02
+    maximum valid imbalance part when open position :: 0.150
+    minimum imbalance time duration :: 10000s
+    minimum potential complete time :: 2 seconds
+    minimum complete time :: 60 seconds
+    data live time :: 10 minutes
+    large data live time :: 60 minutes
+    large data entry size :: 15 seconds
+    time in the past to check for contr-imbalance :: 60 minutes
+    already returned price imbalance partition on potential endpoint check 0.350
+INFO  [2025-01-02 09:38:35] ImbalanceService.subscribe :::: listener added org.tradebot.listener.ImbalanceStateListener$MockitoMock$HO5OIhHu
+INFO  [2025-01-02 09:38:35] ImbalanceService.findImbalanceStart :::: filtering from 1 imbalances with a largest size: 2100.00
+INFO  [2025-01-02 09:38:35] ImbalanceService.findImbalanceStart :::: found imbalance: Imbalance
+   startTime :: 1970-01-01 00:00:00
+   startPrice :: 97900.00$
+   endTime :: 1970-01-01 00:00:20
+   endPrice :: 100000.00$
+   computedDuration :: 0.00. let's check is it valid?
+INFO  [2025-01-02 09:38:35] ImbalanceService.isValid :::: is there is local price extrema between start and end of imbalance? false
+INFO  [2025-01-02 09:38:35] ImbalanceService.isValid :::: is it a local price extrema between start and end? false
+INFO  [2025-01-02 09:38:35] ImbalanceService.isValid :::: is it a contr imbalance?: false
+INFO  [2025-01-02 09:38:35] ImbalanceService.findImbalanceStart :::: UP started: Imbalance
+   startTime :: 1970-01-01 00:00:00
+   startPrice :: 97900.00$
+   endTime :: 1970-01-01 00:00:20
+   endPrice :: 100000.00$
+   computedDuration :: 0.00 on 1970-01-01 00:00:20
+INFO  [2025-01-02 09:38:35] ImbalanceService.<init> :::: imbalance parameters:
+    complete time modificator :: 0.500
+    potential complete time modificator :: 0.060
+    speed modificator :: 1.0E-7
+    price modificator :: 0.02
+    maximum valid imbalance part when open position :: 0.150
+    minimum imbalance time duration :: 10000s
+    minimum potential complete time :: 2 seconds
+    minimum complete time :: 60 seconds
+    data live time :: 10 minutes
+    large data live time :: 60 minutes
+    large data entry size :: 15 seconds
+    time in the past to check for contr-imbalance :: 60 minutes
+    already returned price imbalance partition on potential endpoint check 0.350
+INFO  [2025-01-02 09:38:35] ImbalanceService.subscribe :::: listener added org.tradebot.listener.ImbalanceStateListener$MockitoMock$HO5OIhHu
+INFO  [2025-01-02 09:38:35] ImbalanceService.findImbalanceStart :::: filtering from 1 imbalances with a largest size: 2100.00
+INFO  [2025-01-02 09:38:35] ImbalanceService.findImbalanceStart :::: found imbalance: Imbalance
+   startTime :: 1970-01-01 00:00:00
+   startPrice :: 97900.00$
+   endTime :: 1970-01-01 00:00:20
+   endPrice :: 100000.00$
+   computedDuration :: 0.00. let's check is it valid?
+INFO  [2025-01-02 09:38:35] ImbalanceService.isValid :::: is there is local price extrema between start and end of imbalance? false
+INFO  [2025-01-02 09:38:35] ImbalanceService.isValid :::: is it a local price extrema between start and end? false
+INFO  [2025-01-02 09:38:35] ImbalanceService.isValid :::: is it a contr imbalance?: false
+INFO  [2025-01-02 09:38:35] ImbalanceService.findImbalanceStart :::: UP started: Imbalance
+   startTime :: 1970-01-01 00:00:00
+   startPrice :: 97900.00$
+   endTime :: 1970-01-01 00:00:20
+   endPrice :: 100000.00$
+   computedDuration :: 0.00 on 1970-01-01 00:00:20
+INFO  [2025-01-02 09:38:35] ImbalanceService.unsubscribe :::: listener removed org.tradebot.listener.ImbalanceStateListener$MockitoMock$HO5OIhHu
+INFO  [2025-01-02 09:38:35] ImbalanceService.checkPotentialEndPointCondition :::: computed duration: 1145.5 < 2000
+INFO  [2025-01-02 09:38:35] ImbalanceService.checkPotentialEndPointCondition :::: possible entry point with computed possible duration: 1145.5 (mills)
+INFO  [2025-01-02 09:38:35] ImbalanceService.<init> :::: imbalance parameters:
+    complete time modificator :: 0.500
+    potential complete time modificator :: 0.060
+    speed modificator :: 1.0E-7
+    price modificator :: 0.02
+    maximum valid imbalance part when open position :: 0.150
+    minimum imbalance time duration :: 10000s
+    minimum potential complete time :: 2 seconds
+    minimum complete time :: 60 seconds
+    data live time :: 10 minutes
+    large data live time :: 60 minutes
+    large data entry size :: 15 seconds
+    time in the past to check for contr-imbalance :: 60 minutes
+    already returned price imbalance partition on potential endpoint check 0.350
+INFO  [2025-01-02 09:38:35] ImbalanceService.subscribe :::: listener added org.tradebot.listener.ImbalanceStateListener$MockitoMock$HO5OIhHu
+INFO  [2025-01-02 09:38:35] ImbalanceService.findImbalanceStart :::: filtering from 1 imbalances with a largest size: 2100.00
+INFO  [2025-01-02 09:38:35] ImbalanceService.findImbalanceStart :::: found imbalance: Imbalance
+   startTime :: 1970-01-01 00:00:00
+   startPrice :: 97900.00$
+   endTime :: 1970-01-01 00:00:20
+   endPrice :: 100000.00$
+   computedDuration :: 0.00. let's check is it valid?
+INFO  [2025-01-02 09:38:35] ImbalanceService.isValid :::: is there is local price extrema between start and end of imbalance? false
+INFO  [2025-01-02 09:38:35] ImbalanceService.isValid :::: is it a local price extrema between start and end? false
+INFO  [2025-01-02 09:38:35] ImbalanceService.isValid :::: is it a contr imbalance?: false
+INFO  [2025-01-02 09:38:35] ImbalanceService.findImbalanceStart :::: UP started: Imbalance
+   startTime :: 1970-01-01 00:00:00
+   startPrice :: 97900.00$
+   endTime :: 1970-01-01 00:00:20
+   endPrice :: 100000.00$
+   computedDuration :: 0.00 on 1970-01-01 00:00:20
+INFO  [2025-01-02 09:38:35] ImbalanceService.checkPotentialEndPointCondition :::: computed duration: 1145.5 < 2000
+INFO  [2025-01-02 09:38:35] ImbalanceService.checkPotentialEndPointCondition :::: possible entry point with computed possible duration: 1145.5 (mills)
+INFO  [2025-01-02 09:38:35] ImbalanceService.checkCompleteCondition :::: UP completed: Imbalance
+   startTime :: 1970-01-01 00:00:00
+   startPrice :: 97900.00$
+   endTime :: 1970-01-01 00:00:21
+   endPrice :: 100100.00$
+   computedDuration :: 1145.45 on 1970-01-01 00:01:22
+INFO  [2025-01-02 09:38:35] TradeHandler.<init> :::: service started
+INFO  [2025-01-02 09:38:35] TradeHandler.<init> :::: service started
+INFO  [2025-01-02 09:38:35] TradeHandler.<init> :::: service started
+INFO  [2025-01-02 09:38:35] TradeHandler.<init> :::: service started
+INFO  [2025-01-02 09:38:35] TradeHandler.<init> :::: service started
+INFO  [2025-01-02 09:38:35] TradeHandler.<init> :::: service started
+INFO  [2025-01-02 09:38:35] TradeHandler.subscribe :::: listener added org.tradebot.listener.MarketDataListener$MockitoMock$TIyZyqYT
+INFO  [2025-01-02 09:38:35] TradeHandler.<init> :::: service started
+INFO  [2025-01-02 09:38:35] TradeHandler.<init> :::: service started
+INFO  [2025-01-02 09:38:35] TradeHandler.subscribe :::: listener added org.tradebot.listener.MarketDataListener$MockitoMock$TIyZyqYT
+INFO  [2025-01-02 09:38:35] TradeHandler.unsubscribe :::: listener removed org.tradebot.listener.MarketDataListener$MockitoMock$TIyZyqYT
+INFO  [2025-01-02 09:38:35] TradeHandler.<init> :::: service started
+INFO  [2025-01-02 09:38:36] TradeHandler.<init> :::: service started
+INFO  [2025-01-02 09:38:36] TradeHandler.subscribe :::: listener added org.tradebot.listener.MarketDataListener$MockitoMock$TIyZyqYT
+INFO  [2025-01-02 09:38:36] TradeHandler.<init> :::: service started
+INFO  [2025-01-02 09:38:36] TradeHandler.<init> :::: service started

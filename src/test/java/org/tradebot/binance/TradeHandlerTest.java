@@ -8,6 +8,7 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.tradebot.domain.MarketEntry;
 import org.tradebot.listener.MarketDataListener;
+import org.tradebot.util.TaskManager;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -20,10 +21,13 @@ class TradeHandlerTest {
     @Mock
     private MarketDataListener listener;
 
+    @Mock
+    private TaskManager taskManager;
+
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        tradeHandler = new TradeHandler();
+        tradeHandler = new TradeHandler(taskManager);
     }
 
     @Test
@@ -36,16 +40,6 @@ class TradeHandlerTest {
     }
 
     @Test
-    void testStartAndStop() {
-        tradeHandler.start();
-        assertNotNull(tradeHandler.marketDataScheduler);
-        assertFalse(tradeHandler.marketDataScheduler.isShutdown());
-
-        tradeHandler.stop();
-        assertNull(tradeHandler.marketDataScheduler);
-    }
-
-    @Test
     void testOnMessage_AddsToQueue() {
         JSONObject message = new JSONObject().put("p", "100.5").put("q", "10.0");
         tradeHandler.onMessage(message);
@@ -54,25 +48,25 @@ class TradeHandlerTest {
     }
 
     @Test
-    void testCalculateMarketData_ProcessValidData() {
+    void testUpdateMarketData_ProcessValidData() {
         JSONObject trade1 = new JSONObject().put("p", "100.5").put("q", "10.0");
         JSONObject trade2 = new JSONObject().put("p", "200.5").put("q", "20.0");
         tradeHandler.activeQueue.add(trade1);
         tradeHandler.activeQueue.add(trade2);
         doNothing().when(listener).notifyNewMarketEntry(anyLong(), any());
         tradeHandler.subscribe(listener);
-        tradeHandler.calculateMarketData();
+        tradeHandler.updateMarketData();
         verify(listener).notifyNewMarketEntry(anyLong(), any(MarketEntry.class));
         assertTrue(tradeHandler.processingQueue.isEmpty());
     }
 
     @Test
-    void testCalculateMarketData_EmptyQueue() {
+    void testUpdateMarketData_EmptyQueue() {
         tradeHandler.lastPrice = 150.0;
         tradeHandler.activeQueue.clear();
         doNothing().when(listener).notifyNewMarketEntry(anyLong(), any());
         tradeHandler.subscribe(listener);
-        tradeHandler.calculateMarketData();
+        tradeHandler.updateMarketData();
         verify(listener).notifyNewMarketEntry(anyLong(), any(MarketEntry.class));
     }
 

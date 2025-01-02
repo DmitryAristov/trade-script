@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.tradebot.util.TaskManager;
 
 import static org.mockito.Mockito.*;
 import static org.junit.jupiter.api.Assertions.*;
@@ -28,10 +29,13 @@ class WebSocketServiceTest {
     @Mock
     private RestAPIService apiService;
 
+    @Mock
+    private TaskManager taskManager;
+
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        webSocketService = spy(new WebSocketService("BTCUSDT", tradeHandler, orderBookHandler, userDataHandler, apiService));
+        webSocketService = spy(new WebSocketService("BTCUSDT", tradeHandler, orderBookHandler, userDataHandler, apiService, taskManager));
     }
 
     @Test
@@ -70,13 +74,11 @@ class WebSocketServiceTest {
     }
 
     @Test
-    void testUnsubscribe() {
-        doNothing().when(tradeHandler).stop();
+    void testStop() {
         doNothing().when(apiService).removeUserStreamKey();
         doNothing().when(webSocketService).send(anyString());
-        webSocketService.unsubscribe();
+        webSocketService.stop();
         verify(webSocketService, times(2)).send(anyString());
-        verify(tradeHandler).stop();
     }
 
     @Test
