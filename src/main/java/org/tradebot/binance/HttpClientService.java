@@ -7,6 +7,7 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
@@ -21,18 +22,33 @@ public class HttpClientService {
     private static final String BASE_URL = "https://fapi.binance.com";
 
     public String sendRequest(String endpoint, String method, Map<String, String> params) {
+        return sendRequest(endpoint, method, params, false);
+    }
+
+    public String sendRequest(String endpoint, String method, Map<String, String> params, boolean useBody) {
         Log.debug(String.format("send %s request to %s with params %s", method, endpoint, params.toString()));
         try {
             params.put("timestamp", String.valueOf(System.currentTimeMillis()));
             String signature = generateSignature(params);
             params.put("signature", signature);
 
-            URL url = new URI(BASE_URL + endpoint + "?" + getParamsString(params)).toURL();
+            String query = getParamsString(params);
+            URL url = useBody
+                    ? new URI(BASE_URL + endpoint).toURL()
+                    : new URI(BASE_URL + endpoint + "?" + query).toURL();
 
             HttpURLConnection connection = (HttpURLConnection) url.openConnection();
             connection.setRequestMethod(method);
             connection.setRequestProperty("X-MBX-APIKEY", API_KEY);
             connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+
+            if (useBody && (method.equals("POST") || method.equals("PUT") || method.equals("DELETE"))) {
+                connection.setDoOutput(true);
+                try (OutputStream os = connection.getOutputStream()) {
+                    byte[] input = query.getBytes(StandardCharsets.UTF_8);
+                    os.write(input, 0, input.length);
+                }
+            }
 
             Map<String, List<String>> headers = connection.getHeaderFields();
             Log.debug(String.format("headers %s", headers.toString()));

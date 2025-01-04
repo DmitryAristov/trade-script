@@ -5,7 +5,7 @@ import org.tradebot.service.TradingBot;
 public class Main {
 
     public static void main(String[] args) {
-        TradingBot bot = new TradingBot("BTCUSDT", 6);
+        TradingBot bot = TradingBot.createBot("BTCUSDT", 6);
         bot.start();
 
         try {

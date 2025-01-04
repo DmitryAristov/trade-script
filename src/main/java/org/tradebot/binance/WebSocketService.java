@@ -3,11 +3,15 @@ package org.tradebot.binance;
 import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.handshake.ServerHandshake;
 import org.json.JSONObject;
+import org.tradebot.listener.WebSocketListener;
 import org.tradebot.util.Log;
 import org.tradebot.util.TaskManager;
 
 import java.net.URI;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class WebSocketService extends WebSocketClient {
 
@@ -17,8 +21,11 @@ public class WebSocketService extends WebSocketClient {
     private final RestAPIService apiService;
     private final TaskManager taskManager;
     private final String symbol;
-    private boolean userDataStream = false;
+    private final List<WebSocketListener> listeners = new ArrayList<>();
+
+    protected final AtomicBoolean userDataStream = new AtomicBoolean(false);
     private String listenKey = "";
+    private final AtomicBoolean isReady = new AtomicBoolean(false);
 
     public WebSocketService(String symbol,
                             TradeHandler tradeHandler,
@@ -34,27 +41,28 @@ public class WebSocketService extends WebSocketClient {
         this.apiService = apiService;
         this.taskManager = taskManager;
 
-        this.taskManager.create("websocket_ping", () -> {
-            if (this.isOpen()) {
+        setupTasks();
+        Log.info("service created");
+    }
+
+    private void setupTasks() {
+        taskManager.create("websocket_ping", () -> {
+            if (isReady()) {
                 Log.info("websocket ping");
                 this.sendPing();
             }
         }, TaskManager.Type.PERIOD, 5, 5, TimeUnit.MINUTES);
-        //TODO test reconnection from here
-        this.taskManager.create("websocket_reconnect", () -> {
-            if (this.isOpen()) {
-                Log.info("websocket reconnect");
-                this.reconnect();
-            }
-        }, TaskManager.Type.PERIOD, 24 * 60 -  5, 24 * 60 -  5, TimeUnit.MINUTES);
 
-        Log.info("service created");
+        taskManager.create("websocket_reconnect", this::reconnectWebSocket, TaskManager.Type.PERIOD,
+                24 * 60 - 5, 24 * 60 - 5, TimeUnit.MINUTES);
     }
 
     @Override
     public void onOpen(ServerHandshake handshake) {
         send(String.format("{\"method\": \"SUBSCRIBE\", \"params\": [\"%s@trade\"], \"id\": 1}", symbol.toLowerCase()));
         send(String.format("{\"method\": \"SUBSCRIBE\", \"params\": [\"%s@depth@100ms\"], \"id\": 2}", symbol.toLowerCase()));
+        setReady(true);
+        updateUserDataStream(userDataStream.get());
         Log.info("service started");
     }
 
@@ -62,58 +70,104 @@ public class WebSocketService extends WebSocketClient {
     public void onMessage(String msg) {
         JSONObject message = new JSONObject(msg);
         if (message.has("e")) {
-            String eventType = message.getString("e");
-            if ("trade".equals(eventType)) {
-                tradeHandler.onMessage(message);
-            } else if ("depthUpdate".equals(eventType)) {
-                orderBookHandler.onMessage(message);
-            } else {
-                userDataHandler.onMessage(eventType, message);
+            switch (message.getString("e")) {
+                case "trade" -> tradeHandler.onMessage(message);
+                case "depthUpdate" -> orderBookHandler.onMessage(message);
+                default -> userDataHandler.onMessage(message.getString("e"), message);
             }
         }
     }
 
     @Override
     public void onClose(int code, String reason, boolean remote) {
-        Log.info("WebSocket closed");
+        setReady(false);
+        Log.info(String.format("WebSocket closed: %d, %s", code, reason));
     }
 
     @Override
     public void onError(Exception e) {
+        setReady(false);
         Log.error(e);
+        reconnectWebSocket();
     }
+
+    protected void reconnectWebSocket() {
+        Log.info("reconnecting WebSocket...");
+        boolean wasUserDataStreamActive = userDataStream.get();
+        unsubscribeFromStreams();
+        reconnect();
+
+        if (wasUserDataStreamActive) {
+            updateUserDataStream(true);
+        }
+    }
+
 
     public void stop() {
-        send(String.format("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"%s@trade\"], \"id\": 1}", symbol.toLowerCase()));
-        send(String.format("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"%s@depth@100ms\"], \"id\": 2}", symbol.toLowerCase()));
-        closeUserDataStream();
-        
-        Log.info("service stopped");
+        Log.info("stopping WebSocket service...");
+        setReady(false);
+        unsubscribeFromStreams();
+        close();
     }
 
-    public void closeUserDataStream() {
-        if (userDataStream) {
-            userDataStream = false;
+    private void unsubscribeFromStreams() {
+        send(String.format("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"%s@trade\"], \"id\": 1}", symbol.toLowerCase()));
+        send(String.format("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"%s@depth@100ms\"], \"id\": 2}", symbol.toLowerCase()));
+        if (userDataStream.get()) {
             send(String.format("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"%s\"], \"id\": 3}", listenKey));
             taskManager.stop("user_data_stream_ping");
             apiService.removeUserStreamKey();
+            userDataStream.set(false);
         }
     }
 
-    public void openUserDataStream() {
-        if (!userDataStream) {
-            userDataStream = true;
-            listenKey = apiService.getUserStreamKey();
-            send(String.format("{\"method\": \"SUBSCRIBE\", \"params\": [\"%s\"], \"id\": 3}", listenKey));
+    public void updateUserDataStream(boolean enable) {
+        if (enable) {
+            if (isReady()) {
+                listenKey = apiService.getUserStreamKey();
+                send(String.format("{\"method\": \"SUBSCRIBE\", \"params\": [\"%s\"], \"id\": 3}", listenKey));
 
-            taskManager.create("user_data_stream_ping", () -> {
-                if (userDataStream) {
-                    Log.info("user data stream keep alive");
-                    apiService.keepAliveUserStreamKey();
+                taskManager.create("user_data_stream_ping", () -> {
+                    if (userDataStream.get()) {
+                        Log.info("User data stream keep alive");
+                        apiService.keepAliveUserStreamKey();
+                    }
+                }, TaskManager.Type.PERIOD, 59, 59, TimeUnit.MINUTES);
+            }
+            userDataStream.set(true);
+            Log.info("User data stream started");
+        } else {
+            if (isReady()) {
+                if (userDataStream.get()) {
+                    send(String.format("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"%s\"], \"id\": 3}", listenKey));
+                    taskManager.stop("user_data_stream_ping");
+                    apiService.removeUserStreamKey();
                 }
-            }, TaskManager.Type.PERIOD, 59, 59, TimeUnit.MINUTES);
-            Log.info("user data stream started");
+            }
+            userDataStream.set(false);
+            Log.info("User data stream stopped");
         }
+    }
+
+    public boolean isReady() {
+        return isReady.get() && isOpen();
+    }
+
+    private void setReady(boolean ready) {
+        isReady.set(ready);
+        listeners.forEach(listener -> listener.notifyWebsocketStateChanged(ready));
+    }
+
+    public void subscribe(WebSocketListener listener) {
+        if (!listeners.contains(listener)) {
+            listeners.add(listener);
+            Log.info(String.format("listener added %s", listener.getClass().getName()));
+        }
+    }
+
+    public void unsubscribe(WebSocketListener listener) {
+        listeners.remove(listener);
+        Log.info(String.format("listener removed %s", listener.getClass().getName()));
     }
 
     public void logAll() {

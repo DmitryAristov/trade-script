@@ -5,9 +5,11 @@ import org.tradebot.binance.WebSocketService;
 import org.tradebot.domain.Imbalance;
 import org.tradebot.domain.Order;
 import org.tradebot.domain.Position;
+import org.tradebot.domain.WorkingType;
 import org.tradebot.listener.ImbalanceStateListener;
 import org.tradebot.listener.OrderBookListener;
 import org.tradebot.listener.UserDataListener;
+import org.tradebot.listener.WebSocketListener;
 import org.tradebot.util.Log;
 import org.tradebot.util.TaskManager;
 import org.tradebot.util.TimeFormatter;
@@ -21,7 +23,7 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
-public class Strategy implements OrderBookListener, ImbalanceStateListener, UserDataListener {
+public class Strategy implements OrderBookListener, ImbalanceStateListener, UserDataListener, WebSocketListener {
 
     private static final double[] TAKE_PROFIT_THRESHOLDS = new double[]{0.35, 0.75};
     private static final double STOP_LOSS_MODIFICATOR = 0.015;
@@ -35,10 +37,10 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
 
     private Map<Double, Double> bids = new ConcurrentHashMap<>();
     private Map<Double, Double> asks = new ConcurrentHashMap<>();
-    private double availableBalance;
-
     protected final Map<String, Order> orders = new HashMap<>();
+
     protected boolean positionOpened = false;
+    protected WorkingType workingType = WorkingType.API;
 
     public Strategy(String symbol,
                     int leverage,
@@ -50,8 +52,8 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
         this.apiService = apiService;
         this.webSocketService = webSocketService;
         this.taskManager = taskManager;
-        this.availableBalance = apiService.getAccountBalance();
 
+        //TODO: support positionOpened = true if was is opened before initialization
         Log.info(String.format("""
                         strategy parameters:
                             takes modifiers :: %s
@@ -65,7 +67,7 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
     @Override
     public void notifyImbalanceStateUpdate(long currentTime, ImbalanceService.State imbalanceState, Imbalance imbalance) {
         switch (imbalanceState) {
-            case PROGRESS -> webSocketService.openUserDataStream();
+            case PROGRESS -> webSocketService.updateUserDataStream(true);
             case POTENTIAL_END_POINT -> {
                 if (!positionOpened) {
                     openPosition(currentTime, imbalance);
@@ -75,92 +77,114 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
     }
 
     private void openPosition(long currentTime, Imbalance imbalance) {
-        Order order = new Order();
-        order.setSymbol(symbol);
+        Order openPosition = new Order();
+        openPosition.setSymbol(symbol);
+        openPosition.setType(Order.Type.MARKET);
         double price = switch (imbalance.getType()) {
             case UP -> {
-                order.setSide(Order.Side.SELL);
+                openPosition.setSide(Order.Side.SELL);
                 yield Collections.min(asks.keySet());
             }
             case DOWN -> {
-                order.setSide(Order.Side.BUY);
+                openPosition.setSide(Order.Side.BUY);
                 yield Collections.max(bids.keySet());
             }
         };
         Log.info("price from order book: " + price);
-        Log.info("account balance: " + availableBalance);
 
-        double quantity = availableBalance * leverage / price * 0.99;
-        order.setQuantity(quantity);
-        order.setCreateTime(currentTime);
-        order.setType(Order.Type.MARKET);
-        order.setNewClientOrderId("position_open_order");
+        //TODO: issue with not full quantity
+        double quantity = apiService.getAccountBalance() * leverage / price * 0.95;
+        openPosition.setQuantity(quantity);
+        openPosition.setCreateTime(currentTime);
+        openPosition.setNewClientOrderId("position_open_order");
 
-        createTakeAndStopOrders(imbalance, quantity);
+        placeStop(imbalance);
 
-        orders.put("position_open_order", order);
-        Log.info(String.format("open position market order created: %s", order));
+        Log.info(String.format("open position market order created: %s", openPosition));
+        openPosition = apiService.placeOrder(openPosition);
+        orders.put("position_open_order", openPosition);
 
-        apiService.placeOrder(order);
+        createTakes(imbalance, quantity);
     }
 
-    private void createTakeAndStopOrders(Imbalance imbalance, double quantity) {
+    private void placeStop(Imbalance imbalance) {
+        Order stop = new Order();
+        stop.setSymbol(symbol);
+        stop.setType(Order.Type.STOP_MARKET);
+        stop.setCreateTime(System.currentTimeMillis());
+        stop.setClosePosition(true);
+        stop.setNewClientOrderId("stop");
+
         double imbalanceSize = imbalance.size();
         switch (imbalance.getType()) {
             case UP -> {
-                for (int i = 0; i < TAKE_PROFIT_THRESHOLDS.length; i++) {
-                    Order order = new Order();
-                    order.setSymbol(symbol);
-                    order.setSide(Order.Side.BUY);
-                    order.setType(Order.Type.LIMIT);
-                    order.setPrice(imbalance.getEndPrice() - TAKE_PROFIT_THRESHOLDS[i] * imbalanceSize);
-                    order.setQuantity(quantity * 0.5);
-                    order.setReduceOnly(true);
-                    String clientId = String.format("take_%d", i + 1);
-                    order.setNewClientOrderId(clientId);
-                    order.setTimeInForce(Order.TimeInForce.GTC);
-
-                    orders.put(clientId, order);
-                    Log.info(String.format("take profit limit order created: %s", order));
-                }
-                Order order = new Order();
-                order.setSymbol(symbol);
-                order.setSide(Order.Side.BUY);
-                order.setType(Order.Type.STOP_MARKET);
-                order.setStopPrice(imbalance.getEndPrice() + imbalanceSize * STOP_LOSS_MODIFICATOR);
-                order.setClosePosition(true);
-                order.setNewClientOrderId("stop");
-
-                orders.put("stop", order);
-                Log.info(String.format("stop market order created: %s", order));
+                stop.setSide(Order.Side.BUY);
+                stop.setStopPrice(imbalance.getEndPrice() + imbalanceSize * STOP_LOSS_MODIFICATOR);
             }
             case DOWN -> {
-                for (int i = 0; i < TAKE_PROFIT_THRESHOLDS.length; i++) {
-                    Order order = new Order();
-                    order.setSymbol(symbol);
-                    order.setSide(Order.Side.SELL);
-                    order.setType(Order.Type.LIMIT);
-                    order.setPrice(imbalance.getEndPrice() + TAKE_PROFIT_THRESHOLDS[i] * imbalanceSize);
-                    order.setQuantity(quantity * 0.5);
-                    order.setReduceOnly(true);
-                    String clientId = String.format("take_%d", i + 1);
-                    order.setNewClientOrderId(clientId);
-                    order.setTimeInForce(Order.TimeInForce.GTC);
-
-                    orders.put(clientId, order);
-                    Log.info(String.format("take profit limit order created: %s", order));
-                }
-                Order order = new Order();
-                order.setSymbol(symbol);
-                order.setSide(Order.Side.SELL);
-                order.setType(Order.Type.STOP_MARKET);
-                order.setStopPrice(imbalance.getEndPrice() - imbalanceSize * STOP_LOSS_MODIFICATOR);
-                order.setClosePosition(true);
-                order.setNewClientOrderId("stop");
-
-                orders.put("stop", order);
-                Log.info(String.format("stop market order created: %s", order));
+                stop.setSide(Order.Side.SELL);
+                stop.setStopPrice(imbalance.getEndPrice() - imbalanceSize * STOP_LOSS_MODIFICATOR);
             }
+        }
+        stop = apiService.placeOrder(stop);
+        orders.put("stop", stop);
+        Log.info(String.format("stop market order placed: %s", stop));
+    }
+
+    private void createTakes(Imbalance imbalance, double quantity) {
+        Order take1 = new Order();
+        take1.setSymbol(symbol);
+        take1.setType(Order.Type.LIMIT);
+        take1.setCreateTime(System.currentTimeMillis());
+        take1.setReduceOnly(true);
+        take1.setQuantity(quantity * 0.5);
+        take1.setNewClientOrderId("take_1");
+        take1.setTimeInForce(Order.TimeInForce.GTC);
+
+        Order take2 = new Order();
+        take2.setSymbol(symbol);
+        take2.setCreateTime(System.currentTimeMillis());
+        take2.setType(Order.Type.LIMIT);
+        take2.setReduceOnly(true);
+        take2.setQuantity(quantity * 0.5);
+        take2.setNewClientOrderId("take_2");
+        take2.setTimeInForce(Order.TimeInForce.GTC);
+
+        double imbalanceSize = imbalance.size();
+        switch (imbalance.getType()) {
+            case UP -> {
+                take1.setSide(Order.Side.BUY);
+                take2.setSide(Order.Side.BUY);
+                take1.setPrice(imbalance.getEndPrice() - TAKE_PROFIT_THRESHOLDS[0] * imbalanceSize);
+                take2.setPrice(imbalance.getEndPrice() - TAKE_PROFIT_THRESHOLDS[1] * imbalanceSize);
+            }
+            case DOWN -> {
+                take1.setSide(Order.Side.SELL);
+                take2.setSide(Order.Side.SELL);
+                take1.setPrice(imbalance.getEndPrice() + TAKE_PROFIT_THRESHOLDS[0] * imbalanceSize);
+                take2.setPrice(imbalance.getEndPrice() + TAKE_PROFIT_THRESHOLDS[1] * imbalanceSize);
+            }
+        }
+        orders.put("take_1", take1);
+        orders.put("take_2", take2);
+        Log.info(String.format("take profit limit order created: %s", take1));
+        Log.info(String.format("take profit limit order created: %s", take1));
+
+        if (workingType == WorkingType.API) {
+            Log.error("websocket connection lost, scheduling place take profit orders with timeout");
+            taskManager.create("manual_open_take_profits", () -> {
+                if (positionOpened) {
+                    return;
+                }
+
+                if (apiService.queryOrder(orders.get("position_open_order")).getStatus() == Order.Status.FILLED) {
+                    orders.replace("take_1", apiService.placeOrder(orders.get("take_1")));
+                    orders.replace("take_2", apiService.placeOrder(orders.get("take_2")));
+                    positionOpened = true;
+                    taskManager.create("check_orders_api", this::updateOrdersState, TaskManager.Type.PERIOD, 5, 5, TimeUnit.SECONDS);
+                    taskManager.stop("manual_open_take_profits");
+                }
+            }, TaskManager.Type.PERIOD, 0, 2, TimeUnit.SECONDS);
         }
     }
 
@@ -174,36 +198,44 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
     public void notifyOrderUpdate(String clientId, String status) {
         Log.info(String.format("new status %s of order %s", clientId, status));
         if ("FILLED".equals(status)) {
-            if ("position_open_order".equals(clientId)) {
-                Log.info("open position market order filled");
-                orders.remove("position_open_order");
-                apiService.placeOrders(orders.values());
+            if (orders.containsKey(clientId)) {
+                orders.get(clientId).setStatus(Order.Status.FILLED);
+                if ("position_open_order".equals(clientId)) {
+                    Log.info("open position market order filled");
 
-                taskManager.create("close_position", this::closePositionByTimeout, TaskManager.Type.ONCE, POSITION_LIVE_TIME, -1, TimeUnit.HOURS);
-                Log.info("position will be closed", System.currentTimeMillis() + POSITION_LIVE_TIME * 60 * 60 * 1000L);
-                positionOpened = true;
-                return;
-            }
-            if ("take_1".equals(clientId)) {
-                Log.info("first take limit order filled");
-                orders.remove("take_1");
-                placeBreakEvenStop();
-                return;
-            }
-            if (List.of("take_2", "stop", "breakeven_stop", "timeout_stop").contains(clientId)) {
-                Log.info(String.format("%s order filled, position is closed", clientId));
-                orders.remove(clientId);
-                reinitState();
+                    taskManager.create("close_position", this::closePositionByTimeout, TaskManager.Type.ONCE, POSITION_LIVE_TIME, -1, TimeUnit.HOURS);
+                    Log.info("position will be closed", System.currentTimeMillis() + POSITION_LIVE_TIME * 60 * 60 * 1000L);
+
+                    orders.replace("take_1", apiService.placeOrder(orders.get("take_1")));
+                    orders.replace("take_2", apiService.placeOrder(orders.get("take_2")));
+                    positionOpened = true;
+
+                    return;
+                }
+                if (List.of("take_2", "stop", "breakeven_stop", "timeout_stop").contains(clientId)) {
+                    Log.info(String.format("%s order filled, position is closed", clientId));
+                    reinitState();
+
+                    return;
+                }
+                if ("take_1".equals(clientId)) {
+                    Log.info("first take limit order filled");
+                    placeBreakEvenStop();
+
+                    return;
+                }
             }
         }
     }
 
     private void reinitState() {
-        availableBalance = apiService.getAccountBalance();
-        Log.info(String.format("reset state to initial. Updated balance: %.2f",availableBalance));
-        webSocketService.closeUserDataStream();
+        Log.info("reset state to initial");
+        webSocketService.updateUserDataStream(false);
         taskManager.stop("close_position");
+        taskManager.stop("check_orders_api");
+        taskManager.stop("manual_open_take_profits");
         orders.clear();
+
         positionOpened = false;
     }
 
@@ -214,20 +246,19 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
             throw Log.error("trying to close position by timeout while position is null");
         }
 
-        Order order = new Order();
-        order.setSymbol(symbol);
-        order.setType(Order.Type.MARKET);
-        order.setClosePosition(true);
-        order.setNewClientOrderId("timeout_stop");
-        order.setSide(switch (position.getType()) {
+        Order timeout = new Order();
+        timeout.setSymbol(symbol);
+        timeout.setType(Order.Type.MARKET);
+        timeout.setCreateTime(System.currentTimeMillis());
+        timeout.setClosePosition(true);
+        timeout.setNewClientOrderId("timeout_stop");
+        timeout.setSide(switch (position.getType()) {
             case SHORT -> Order.Side.BUY;
             case LONG -> Order.Side.SELL;
         });
 
-        orders.put("timeout_stop", order);
-        Log.info(String.format("timeout stop order created: %s", order));
-
-        apiService.placeOrder(order);
+        Log.info(String.format("timeout stop order created: %s", timeout));
+        orders.put("timeout_stop", apiService.placeOrder(timeout));
     }
 
     protected void placeBreakEvenStop() {
@@ -237,24 +268,56 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
             throw Log.error("trying to place break even stop when position is null");
         }
 
-        orders.remove("stop");
-        Order order = new Order();
-        order.setSymbol(symbol);
-        order.setType(Order.Type.STOP_MARKET);
+        if (orders.containsKey("stop")) {
+            apiService.cancelOrder(orders.get("stop"));
+            orders.get("stop").setStatus(Order.Status.CANCELED);
+        }
 
-        //TODO add fees calculation
-        order.setStopPrice(position.getEntryPrice());
-        order.setClosePosition(true);
-        order.setNewClientOrderId("breakeven_stop");
-        order.setSide(switch (position.getType()) {
+        Order breakeven = new Order();
+        breakeven.setSymbol(symbol);
+        breakeven.setType(Order.Type.STOP_MARKET);
+        breakeven.setCreateTime(System.currentTimeMillis());
+        //TODO: add fees calculation
+        breakeven.setStopPrice(position.getEntryPrice());
+        breakeven.setClosePosition(true);
+        breakeven.setNewClientOrderId("breakeven_stop");
+        breakeven.setSide(switch (position.getType()) {
             case SHORT -> Order.Side.BUY;
             case LONG -> Order.Side.SELL;
         });
 
-        orders.put("breakeven_stop", order);
-        Log.info(String.format("stop market order modified: %s", order));
+        Log.info(String.format("breakeven stop market order created: %s", breakeven));
+        orders.put("breakeven_stop", apiService.placeOrder(breakeven));
+    }
 
-        apiService.placeOrder(orders.get("breakeven_stop"));
+    @Override
+    public void notifyWebsocketStateChanged(boolean ready) {
+        if (!ready) {
+            workingType = WorkingType.API;
+            if (positionOpened) {
+                taskManager.create("check_orders_api", this::updateOrdersState, TaskManager.Type.PERIOD, 5, 5, TimeUnit.SECONDS);
+            }
+        } else {
+            workingType = WorkingType.WEBSOCKET;
+            taskManager.stop("check_orders_api");
+        }
+    }
+
+    private void updateOrdersState() {
+        Log.debug("actualizing order statuses");
+        orders.values().forEach(local -> {
+            Order actual = apiService.getOpenOrder(local);
+            if (actual.getStatus() != local.getStatus() && actual.getStatus() == Order.Status.FILLED) {
+                if (List.of("take_2", "stop", "breakeven_stop", "timeout_stop").contains(actual.getNewClientOrderId())) {
+                    Log.info(String.format("%s order filled, position is closed", actual.getNewClientOrderId()));
+                    local.setStatus(Order.Status.FILLED);
+                    reinitState();
+                } else if ("take_1".equals(local.getNewClientOrderId())) {
+                    local.setStatus(Order.Status.FILLED);
+                    placeBreakEvenStop();
+                }
+            }
+        });
     }
 
     public void logAll() {
@@ -264,6 +327,5 @@ public class Strategy implements OrderBookListener, ImbalanceStateListener, User
         Log.debug(String.format("bids: %s", bids));
         Log.debug(String.format("asks: %s", asks));
         Log.debug(String.format("positionOpened: %s", positionOpened));
-        Log.debug(String.format("availableBalance: %s", availableBalance));
     }
 }

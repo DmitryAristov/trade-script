@@ -16,6 +16,9 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.List;
+import java.util.ArrayList;
+
 import java.util.concurrent.ConcurrentHashMap;
 
 public class RestAPIService {
@@ -26,7 +29,7 @@ public class RestAPIService {
         this.httpClient = httpClient;
     }
 
-    public void placeOrder(Order order) {
+    public Order placeOrder(Order order) {
         Map<String, String> params = new HashMap<>();
 
         // mandatory params
@@ -60,11 +63,87 @@ public class RestAPIService {
             params.put("timeInForce", String.valueOf(order.getTimeInForce()));
         }
 
-        httpClient.sendRequest("/fapi/v1/order", "POST", params);
+        return getOrder(new JSONObject(httpClient.sendRequest("/fapi/v1/order", "POST", params, true)));
     }
 
-    public void placeOrders(Collection<Order> orders) {
-        orders.forEach(this::placeOrder);
+    public void placeBatchOrders(Collection<Order> orders) {
+        JSONArray batchOrders = new JSONArray();
+
+        orders.forEach(order -> {
+            Map<String, String> params = new HashMap<>();
+
+            // mandatory params
+            params.put("symbol", order.getSymbol());
+            params.put("side", order.getSide().toString());
+            params.put("type", order.getType().toString());
+            if (order.getType() == Order.Type.LIMIT && order.getTimeInForce() == null) {
+                throw Log.error("timeInForce required for LIMIT order");
+            }
+
+            // optional params
+            if (order.getPrice() != null) {
+                params.put("price", String.valueOf(order.getPrice()));
+            }
+            if (order.getQuantity() != null) {
+                params.put("quantity", String.valueOf(order.getQuantity()));
+            }
+            if (order.getStopPrice() != null) {
+                params.put("stopPrice", String.valueOf(order.getStopPrice()));
+            }
+            if (order.isReduceOnly() != null) {
+                params.put("reduceOnly", String.valueOf(order.isReduceOnly()));
+            }
+            if (order.isClosePosition() != null) {
+                params.put("closePosition", String.valueOf(order.isClosePosition()));
+            }
+            if (order.getNewClientOrderId() != null) {
+                params.put("newClientOrderId", String.valueOf(order.getNewClientOrderId()));
+            }
+            if (order.getTimeInForce() != null) {
+                params.put("timeInForce", String.valueOf(order.getTimeInForce()));
+            }
+
+            batchOrders.put(new JSONObject(params));
+        });
+
+        Map<String, String> params = new HashMap<>();
+        params.put("batchOrders", batchOrders.toString());
+        params.put("recvWindow", "5000");
+
+        httpClient.sendRequest("/fapi/v1/batchOrders", "POST", params, true);
+    }
+
+    public void cancelOrder(Order order) {
+        Map<String, String> params = new HashMap<>();
+
+        params.put("symbol", order.getSymbol());
+        params.put("origClientOrderId", order.getNewClientOrderId());
+        params.put("recvWindow", "5000");
+
+        httpClient.sendRequest("/fapi/v1/order", "DELETE", params);
+    }
+
+    public void cancelAllOpenOrders(String symbol) {
+        Map<String, String> params = new HashMap<>();
+
+        params.put("symbol", symbol);
+        params.put("recvWindow", "5000");
+
+        httpClient.sendRequest("/fapi/v1/allOpenOrders", "DELETE", params);
+    }
+
+    public Order queryOrder(Order order) {
+        Map<String, String> params = new HashMap<>();
+
+        params.put("symbol", order.getSymbol());
+        if (order.getId() != null) {
+            params.put("orderId", String.valueOf(order.getId()));
+        } else {
+            params.put("origClientOrderId", String.valueOf(order.getNewClientOrderId()));
+        }
+        params.put("recvWindow", "5000");
+
+        return getOrder(new JSONObject(httpClient.sendRequest("/fapi/v1/order", "GET", params)));
     }
 
     public void setLeverage(String symbol, int leverage) {
@@ -242,5 +321,70 @@ public class RestAPIService {
         String text = BigDecimal.valueOf(value).stripTrailingZeros().toPlainString();
         int index = text.indexOf('.');
         return (index < 0) ? 0 : text.length() - index - 1;
+    }
+
+    public List<Order> getOpenOrders(String symbol) {
+        Map<String, String> params = new HashMap<>();
+        if (symbol != null) {
+            params.put("symbol", symbol.toUpperCase());
+        }
+
+        params.put("recvWindow", "5000");
+
+        String response = httpClient.sendRequest("/fapi/v1/openOrders", "GET", params);
+        JSONArray jsonArray = new JSONArray(response);
+
+        List<Order> orders = new ArrayList<>();
+        for (int i = 0; i < jsonArray.length(); i++) {
+            JSONObject orderJson = jsonArray.getJSONObject(i);
+            Order order = getOrder(orderJson);
+            orders.add(order);
+        }
+
+        return orders;
+    }
+
+    public Order getOpenOrder(Order order) {
+        Map<String, String> params = new HashMap<>();
+        params.put("symbol", order.getSymbol());
+        if (order.getId() != null) {
+            params.put("orderId", String.valueOf(order.getId()));
+        } else {
+            params.put("origClientOrderId", String.valueOf(order.getNewClientOrderId()));
+        }
+        params.put("recvWindow", "5000");
+
+        String response = httpClient.sendRequest("/fapi/v1/openOrder", "GET", params);
+        return getOrder(new JSONObject(response));
+    }
+
+    private static Order getOrder(JSONObject orderJson) {
+        Order order = new Order();
+        order.setSymbol(orderJson.getString("symbol"));
+        order.setSide(Order.Side.valueOf(orderJson.getString("side")));
+        order.setType(Order.Type.valueOf(orderJson.getString("type")));
+        order.setNewClientOrderId(orderJson.getString("clientOrderId"));
+        order.setStatus(Order.Status.valueOf(orderJson.getString("status")));
+        order.setId(orderJson.getInt("orderId"));
+
+        if (orderJson.has("origQty")) {
+            order.setQuantity(orderJson.getDouble("origQty"));
+        }
+        if (orderJson.has("price")) {
+            order.setPrice(orderJson.getDouble("price"));
+        }
+        if (orderJson.has("stopPrice")) {
+            order.setStopPrice(orderJson.getDouble("stopPrice"));
+        }
+        if (orderJson.has("reduceOnly")) {
+            order.setReduceOnly(orderJson.getBoolean("reduceOnly"));
+        }
+        if (orderJson.has("closePosition")) {
+            order.setClosePosition(orderJson.getBoolean("closePosition"));
+        }
+        if (orderJson.has("timeInForce")) {
+            order.setTimeInForce(Order.TimeInForce.valueOf(orderJson.getString("timeInForce")));
+        }
+        return order;
     }
 }

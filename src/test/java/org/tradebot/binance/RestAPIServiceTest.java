@@ -1,11 +1,13 @@
 package org.tradebot.binance;
 
+import org.json.JSONObject;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.*;
 import org.tradebot.service.TradingBot;
 import org.tradebot.domain.*;
 
+import java.io.*;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -30,6 +32,7 @@ class RestAPIServiceTest {
     @Test
     void testPlaceOrder_withAllParams() {
         Order order = new Order();
+        order.setId(123);
         order.setSymbol("BTCUSDT");
         order.setSide(Order.Side.BUY);
         order.setType(Order.Type.LIMIT);
@@ -40,49 +43,46 @@ class RestAPIServiceTest {
         order.setClosePosition(false);
         order.setNewClientOrderId("testOrder123");
         order.setTimeInForce(Order.TimeInForce.GTC);
+        order.setStatus(Order.Status.NEW);
 
-        ArgumentCaptor<Map<String, String>> captor = ArgumentCaptor.forClass(Map.class);
+        String orderJsonStr = readFile("order.json");
+        when(httpClient.sendRequest(anyString(), anyString(), anyMap(), anyBoolean())).thenReturn(orderJsonStr);
 
-        when(httpClient.sendRequest(anyString(), anyString(), anyMap())).thenReturn("mocked-response");
+        Order result = restAPIService.placeOrder(order);
 
-        restAPIService.placeOrder(order);
-
-        verify(httpClient).sendRequest(eq("/fapi/v1/order"), eq("POST"), captor.capture());
-        Map<String, String> params = captor.getValue();
-
-        assertEquals("BTCUSDT", params.get("symbol"));
-        assertEquals("BUY", params.get("side"));
-        assertEquals("LIMIT", params.get("type"));
-        assertEquals("100.50", params.get("price"));
-        assertEquals("10.0", params.get("quantity"));
-        assertEquals("99.50", params.get("stopPrice"));
-        assertEquals("true", params.get("reduceOnly"));
-        assertEquals("false", params.get("closePosition"));
-        assertEquals("GTC", params.get("timeInForce"));
-        assertEquals("testOrder123", params.get("newClientOrderId"));
+        assertEquals(123, result.getId());
+        assertEquals("BTCUSDT", result.getSymbol());
+        assertEquals(Order.Side.BUY, result.getSide());
+        assertEquals(Order.Type.LIMIT, result.getType());
+        assertEquals(100.50, result.getPrice().doubleValue());
+        assertEquals(10.00, result.getQuantity().doubleValue());
+        assertEquals(99.50, result.getStopPrice().doubleValue());
+        assertTrue(result.isReduceOnly());
+        assertFalse(result.isClosePosition());
+        assertEquals(Order.TimeInForce.GTC, result.getTimeInForce());
+        assertEquals(Order.Status.NEW, result.getStatus());
+        assertEquals("testOrder123", result.getNewClientOrderId());
     }
 
     @Test
     void testPlaceOrder_withMandatoryParamsOnly() {
         Order order = new Order();
+        order.setId(123);
         order.setSymbol("BTCUSDT");
-        order.setSide(Order.Side.SELL);
-        order.setType(Order.Type.MARKET);
-        ArgumentCaptor<Map<String, String>> captor = ArgumentCaptor.forClass(Map.class);
-        when(httpClient.sendRequest(anyString(), anyString(), anyMap())).thenReturn("mocked-response");
-        restAPIService.placeOrder(order);
+        order.setSide(Order.Side.BUY);
+        order.setType(Order.Type.LIMIT);
+        order.setTimeInForce(Order.TimeInForce.GTC);
 
-        verify(httpClient).sendRequest(eq("/fapi/v1/order"), eq("POST"), captor.capture());
-        Map<String, String> params = captor.getValue();
-        assertEquals("BTCUSDT", params.get("symbol"));
-        assertEquals("SELL", params.get("side"));
-        assertEquals("MARKET", params.get("type"));
-        assertFalse(params.containsKey("price"));
-        assertFalse(params.containsKey("quantity"));
-        assertFalse(params.containsKey("stopPrice"));
-        assertFalse(params.containsKey("reduceOnly"));
-        assertFalse(params.containsKey("closePosition"));
-        assertFalse(params.containsKey("newClientOrderId"));
+        String orderJsonStr = readFile("order.json");
+        when(httpClient.sendRequest(anyString(), anyString(), anyMap(), anyBoolean())).thenReturn(orderJsonStr);
+
+        Order result = restAPIService.placeOrder(order);
+
+        assertEquals(123, result.getId());
+        assertEquals("BTCUSDT", result.getSymbol());
+        assertEquals(Order.Side.BUY, result.getSide());
+        assertEquals(Order.Type.LIMIT, result.getType());
+        assertNotNull(result.getNewClientOrderId());
     }
 
     @Test
@@ -209,8 +209,29 @@ class RestAPIServiceTest {
         assertEquals(1, orderBook.asks().size());
         assertEquals(1, orderBook.bids().size());
 
-        assertEquals(Map.of(91000.,3.5), orderBook.asks());
-        assertEquals(Map.of(90000.,4.2), orderBook.bids());
+        assertEquals(Map.of(91000., 3.5), orderBook.asks());
+        assertEquals(Map.of(90000., 4.2), orderBook.bids());
 
+    }
+
+    private static String readFile(String fileName) {
+        String filePath = "src/test/resources/" + fileName;
+        File file = new File(filePath);
+        String result = "";
+
+        try {
+            if (file.exists()) {
+                FileReader reader = new FileReader(file);
+                char[] buffer = new char[(int) file.length()];
+                reader.read(buffer);
+                reader.close();
+                result = new String(buffer);
+            } else {
+                result = "";
+            }
+        } catch (IOException _) {
+            return result;
+        }
+        return result;
     }
 }

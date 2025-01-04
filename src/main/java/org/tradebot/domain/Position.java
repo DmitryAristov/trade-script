@@ -41,11 +41,9 @@ public class Position {
     public String toString() {
         return String.format("""
                         Order
-                           entryPrice :: %.2f$
-                           positionAmt :: %.2f""",
+                           entryPrice :: %s
+                           positionAmt :: %s""",
                 entryPrice,
                 positionAmt);
     }
 }
-
-

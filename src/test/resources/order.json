@@ -1,0 +1,14 @@
+{
+  "closePosition": false,
+  "symbol": "BTCUSDT",
+  "clientOrderId": "testOrder123",
+  "side": "BUY",
+  "stopPrice": 99.5,
+  "origQty": 10,
+  "reduceOnly": true,
+  "price": 100.5,
+  "orderId": 123,
+  "type": "LIMIT",
+  "timeInForce": "GTC",
+  "status": "NEW"
+}

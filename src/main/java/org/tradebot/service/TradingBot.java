@@ -18,8 +18,14 @@ public class TradingBot {
     public static Precision precision;
     private static TradingBot instance;
 
-    public TradingBot(String symbol, int leverage) {
-        instance = this;
+    public static TradingBot createBot(String symbol, int leverage) {
+        if (instance == null) {
+            instance = new TradingBot(symbol, leverage);
+        }
+        return instance;
+    }
+
+    private TradingBot(String symbol, int leverage) {
         this.symbol = symbol;
         this.leverage = leverage;
         Log.info(String.format("%s bot created with leverage %d", symbol, leverage));
@@ -79,11 +85,10 @@ public class TradingBot {
         userDataStreamHandler.unsubscribe(strategy);
         taskManager.stopAll();
         webSocketService.stop();
-        webSocketService.close();
         Log.info("bot stopped");
     }
 
-    public static void logAll() {
+    public static void logAll() { //TODO: test logging
         instance.imbalanceService.logAll();
         instance.volatilityService.logAll();
         instance.tradeHandler.logAll();

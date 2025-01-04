@@ -18,6 +18,11 @@ public class Order {
         MARKET,
         LIMIT,
         STOP_MARKET,
+        STOP,
+        TAKE_PROFIT_MARKET,
+        TAKE_PROFIT,
+        LIMIT_MAKER,
+        TRAILING_STOP_MARKET
     }
 
     public enum TimeInForce {
@@ -26,20 +31,43 @@ public class Order {
         FOK
     }
 
+    public enum Status {
+        NEW,
+        FILLED,
+        PARTIALLY_FILLED,
+        CANCELED,
+        EXPIRED,
+        REJECTED,
+        PENDING_CANCEL,
+        NEW_INSURANCE,
+        NEW_ADL,
+        EXPIRED_IN_MATCH
+    }
+
+    private Integer id;
     private String symbol;
     private Side side;
     private Type type;
     private BigDecimal price;
     private BigDecimal quantity;
-    private long createTime;
+    private Long createTime;
 
     private BigDecimal stopPrice;
     private Boolean closePosition;
     private Boolean reduceOnly;
     private String newClientOrderId;
     private TimeInForce timeInForce;
+    private Status status;
     
     public Order() { }
+
+    public Integer getId() {
+        return id;
+    }
+
+    public void setId(Integer id) {
+        this.id = id;
+    }
 
     public String getSymbol() {
         return symbol;
@@ -89,8 +117,12 @@ public class Order {
         this.stopPrice = BigDecimal.valueOf(stopPrice).setScale(precision.price(), RoundingMode.HALF_UP);
     }
 
-    public void setCreateTime(long createTime) {
+    public void setCreateTime(Long createTime) {
         this.createTime = createTime;
+    }
+
+    public Long getCreateTime() {
+        return createTime;
     }
 
     public Boolean isClosePosition() {
@@ -125,21 +157,32 @@ public class Order {
         this.timeInForce = timeInForce;
     }
 
+    public Status getStatus() {
+        return status;
+    }
+
+    public void setStatus(Status status) {
+        this.status = status;
+    }
+
     @Override
     public String toString() {
         return String.format("""
                         Order
+                           id :: %s
                            symbol :: %s
                            side :: %s
                            type :: %s
-                           price :: %.2f$
-                           quantity :: %.2f
-                           stopPrice :: %.2f$
+                           price :: %s
+                           quantity :: %s
+                           stopPrice :: %s
                            closePosition :: %s
                            reduceOnly :: %s
                            newClientOrderId :: %s
                            timeInForce :: %s
+                           status :: %s
                            createTime :: %s""",
+                id,
                 symbol,
                 side,
                 type,
@@ -150,6 +193,7 @@ public class Order {
                 reduceOnly,
                 newClientOrderId,
                 timeInForce,
+                status,
                 TimeFormatter.format(createTime));
     }
 }
