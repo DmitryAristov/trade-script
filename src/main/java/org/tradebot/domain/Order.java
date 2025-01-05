@@ -44,7 +44,7 @@ public class Order {
         EXPIRED_IN_MATCH
     }
 
-    private Integer id;
+    private Long id;
     private String symbol;
     private Side side;
     private Type type;
@@ -61,11 +61,11 @@ public class Order {
     
     public Order() { }
 
-    public Integer getId() {
+    public Long getId() {
         return id;
     }
 
-    public void setId(Integer id) {
+    public void setId(Long id) {
         this.id = id;
     }
 
@@ -194,7 +194,7 @@ public class Order {
                 newClientOrderId,
                 timeInForce,
                 status,
-                TimeFormatter.format(createTime));
+                createTime == null ? 0 : TimeFormatter.format(createTime));
     }
 }
 

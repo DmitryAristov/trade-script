@@ -36,7 +36,7 @@ public class ImbalanceService implements VolatilityListener, MarketDataListener 
      * Время за которое если не появилось нового минимума то считаем имбаланс завершенным (1000мс * 60с = 1 минута)
      */
     public static final double COMPLETE_TIME_MODIFICATOR = 0.5;
-    public static final double POTENTIAL_COMPLETE_TIME_MODIFICATOR = 0.06; //TODO для быстрых и медленных нужна разная формула
+    public static final double POTENTIAL_COMPLETE_TIME_MODIFICATOR = 0.06;
 
     /**
      * Константы для расчета минимальной скорости и цены.
@@ -81,7 +81,7 @@ public class ImbalanceService implements VolatilityListener, MarketDataListener 
                             speed modificator :: %s
                             price modificator :: %s
                             maximum valid imbalance part when open position :: %.3f
-                            minimum imbalance time duration :: %ds
+                            minimum imbalance time duration :: %d seconds
                             minimum potential complete time :: %d seconds
                             minimum complete time :: %d seconds
                             data live time :: %d minutes
@@ -94,7 +94,7 @@ public class ImbalanceService implements VolatilityListener, MarketDataListener 
                 SPEED_MODIFICATOR,
                 PRICE_MODIFICATOR,
                 MAX_VALID_IMBALANCE_PART,
-                MIN_IMBALANCE_TIME_DURATION,
+                MIN_IMBALANCE_TIME_DURATION/1000,
                 MIN_POTENTIAL_COMPLETE_TIME/1000,
                 MIN_COMPLETE_TIME/1000,
                 DATA_LIVE_TIME/60_000L,
@@ -404,7 +404,7 @@ public class ImbalanceService implements VolatilityListener, MarketDataListener 
         Log.debug(String.format("priceChangeThreshold: %.2f", priceChangeThreshold));
         Log.debug(String.format("speedThreshold: %.2f", speedThreshold));
         Log.debug(String.format("currentState: %s", currentState));
-        Log.debug(String.format("currentImbalance: %s", currentImbalance.toString()));
+        Log.debug(String.format("currentImbalance: %s", currentImbalance));
         Log.debug(String.format("seconds: %s", seconds));
         Log.debug(String.format("largeData: %s", largeData));
         Log.debug(String.format("currentMinuteHigh: %.2f", currentMinuteHigh));

@@ -23,7 +23,6 @@ public class WebSocketService extends WebSocketClient {
     private final String symbol;
     private final List<WebSocketListener> listeners = new ArrayList<>();
 
-    protected final AtomicBoolean userDataStream = new AtomicBoolean(false);
     private String listenKey = "";
     private final AtomicBoolean isReady = new AtomicBoolean(false);
 
@@ -33,7 +32,7 @@ public class WebSocketService extends WebSocketClient {
                             UserDataHandler userDataHandler,
                             RestAPIService apiService,
                             TaskManager taskManager) {
-        super(URI.create("wss://fstream.binance.com/ws"));
+        super(URI.create("wss://stream.binancefuture.com/ws"));//"wss://fstream.binance.com/ws"
         this.symbol = symbol;
         this.tradeHandler = tradeHandler;
         this.orderBookHandler = orderBookHandler;
@@ -61,8 +60,9 @@ public class WebSocketService extends WebSocketClient {
     public void onOpen(ServerHandshake handshake) {
         send(String.format("{\"method\": \"SUBSCRIBE\", \"params\": [\"%s@trade\"], \"id\": 1}", symbol.toLowerCase()));
         send(String.format("{\"method\": \"SUBSCRIBE\", \"params\": [\"%s@depth@100ms\"], \"id\": 2}", symbol.toLowerCase()));
+        connectUserDataStream();
         setReady(true);
-        updateUserDataStream(userDataStream.get());
+
         Log.info("service started");
     }
 
@@ -79,6 +79,13 @@ public class WebSocketService extends WebSocketClient {
     }
 
     @Override
+    public void onCloseInitiated(int code, String reason) {
+        Log.info("Websocket on close initiated called");
+        setReady(false);
+        super.onCloseInitiated(code, reason);
+    }
+
+    @Override
     public void onClose(int code, String reason, boolean remote) {
         setReady(false);
         Log.info(String.format("WebSocket closed: %d, %s", code, reason));
@@ -87,19 +94,14 @@ public class WebSocketService extends WebSocketClient {
     @Override
     public void onError(Exception e) {
         setReady(false);
-        Log.error(e);
+        Log.warn(e);
         reconnectWebSocket();
     }
 
     protected void reconnectWebSocket() {
         Log.info("reconnecting WebSocket...");
-        boolean wasUserDataStreamActive = userDataStream.get();
         unsubscribeFromStreams();
         reconnect();
-
-        if (wasUserDataStreamActive) {
-            updateUserDataStream(true);
-        }
     }
 
 
@@ -113,40 +115,25 @@ public class WebSocketService extends WebSocketClient {
     private void unsubscribeFromStreams() {
         send(String.format("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"%s@trade\"], \"id\": 1}", symbol.toLowerCase()));
         send(String.format("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"%s@depth@100ms\"], \"id\": 2}", symbol.toLowerCase()));
-        if (userDataStream.get()) {
-            send(String.format("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"%s\"], \"id\": 3}", listenKey));
-            taskManager.stop("user_data_stream_ping");
-            apiService.removeUserStreamKey();
-            userDataStream.set(false);
-        }
+        send(String.format("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"%s\"], \"id\": 3}", listenKey));
+
+        taskManager.stop("user_data_stream_ping");
+        apiService.removeUserStreamKey();
+        Log.info("User data stream stopped");
+
+        orderBookHandler.stop();
     }
 
-    public void updateUserDataStream(boolean enable) {
-        if (enable) {
-            if (isReady()) {
-                listenKey = apiService.getUserStreamKey();
-                send(String.format("{\"method\": \"SUBSCRIBE\", \"params\": [\"%s\"], \"id\": 3}", listenKey));
+    public void connectUserDataStream() {
+        listenKey = apiService.getUserStreamKey();
+        send(String.format("{\"method\": \"SUBSCRIBE\", \"params\": [\"%s\"], \"id\": 3}", listenKey));
 
-                taskManager.create("user_data_stream_ping", () -> {
-                    if (userDataStream.get()) {
-                        Log.info("User data stream keep alive");
-                        apiService.keepAliveUserStreamKey();
-                    }
-                }, TaskManager.Type.PERIOD, 59, 59, TimeUnit.MINUTES);
-            }
-            userDataStream.set(true);
-            Log.info("User data stream started");
-        } else {
+        taskManager.create("user_data_stream_ping", () -> {
+            Log.info("User data stream keep alive");
             if (isReady()) {
-                if (userDataStream.get()) {
-                    send(String.format("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"%s\"], \"id\": 3}", listenKey));
-                    taskManager.stop("user_data_stream_ping");
-                    apiService.removeUserStreamKey();
-                }
+                apiService.keepAliveUserStreamKey();
             }
-            userDataStream.set(false);
-            Log.info("User data stream stopped");
-        }
+        }, TaskManager.Type.PERIOD, 59, 59, TimeUnit.MINUTES);
     }
 
     public boolean isReady() {
@@ -172,8 +159,8 @@ public class WebSocketService extends WebSocketClient {
 
     public void logAll() {
         Log.debug(String.format("symbol: %s", symbol));
-        Log.debug(String.format("userDataStream: %s", userDataStream));
         Log.debug(String.format("listenKey: %s", listenKey));
         Log.debug(String.format("this.isOpen(): %s", this.isOpen()));
+        Log.debug(String.format("this.isReady(): %s", this.isReady()));
     }
 }

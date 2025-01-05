@@ -65,6 +65,8 @@ public class TradeHandler {
             if (entry == null) {
                 return;
             }
+            Log.removeLines(1, Log.MARKET_DATA_LOGS_PATH);
+            Log.info("entry: " + entry, Log.MARKET_DATA_LOGS_PATH);
 
             listeners.forEach(listener -> listener.notifyNewMarketEntry(openTime, entry));
         } catch (Exception e) {

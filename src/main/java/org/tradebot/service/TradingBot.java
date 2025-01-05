@@ -16,7 +16,7 @@ public class TradingBot {
     public final int leverage;
     public final String symbol;
     public static Precision precision;
-    private static TradingBot instance;
+    protected static TradingBot instance;
 
     public static TradingBot createBot(String symbol, int leverage) {
         if (instance == null) {
@@ -25,7 +25,11 @@ public class TradingBot {
         return instance;
     }
 
-    private TradingBot(String symbol, int leverage) {
+    public static TradingBot getInstance() {
+        return instance;
+    }
+
+    protected TradingBot(String symbol, int leverage) {
         this.symbol = symbol;
         this.leverage = leverage;
         Log.info(String.format("%s bot created with leverage %d", symbol, leverage));
@@ -63,16 +67,18 @@ public class TradingBot {
         imbalanceService = new ImbalanceService();
         tradeHandler = new TradeHandler(taskManager);
         userDataStreamHandler = new UserDataHandler();
-        orderBookHandler = new OrderBookHandler(symbol, apiService);
+        orderBookHandler = new OrderBookHandler(symbol, apiService, taskManager);
         webSocketService = new WebSocketService(symbol, tradeHandler, orderBookHandler, userDataStreamHandler, apiService, taskManager);
         volatilityService = new VolatilityService(symbol, apiService, taskManager);
-        strategy = new Strategy(symbol, leverage, apiService, webSocketService, taskManager);
+        strategy = new Strategy(symbol, leverage, apiService, taskManager);
 
         imbalanceService.subscribe(strategy);
         tradeHandler.subscribe(imbalanceService);
         volatilityService.subscribe(imbalanceService);
         orderBookHandler.subscribe(strategy);
         userDataStreamHandler.subscribe(strategy);
+        webSocketService.subscribe(strategy);
+
         webSocketService.connect();
         Log.info("bot started");
     }
@@ -83,19 +89,30 @@ public class TradingBot {
         tradeHandler.unsubscribe(imbalanceService);
         orderBookHandler.unsubscribe(strategy);
         userDataStreamHandler.unsubscribe(strategy);
+        webSocketService.unsubscribe(strategy);
+
         taskManager.stopAll();
         webSocketService.stop();
         Log.info("bot stopped");
     }
 
-    public static void logAll() { //TODO: test logging
-        instance.imbalanceService.logAll();
-        instance.volatilityService.logAll();
-        instance.tradeHandler.logAll();
-        instance.orderBookHandler.logAll();
-        instance.userDataStreamHandler.logAll();
-        instance.strategy.logAll();
-        instance.webSocketService.logAll();
-        instance.taskManager.logAll();
+    public static void logAll() {
+        if (instance != null) {
+            if (instance.imbalanceService != null)
+                instance.imbalanceService.logAll();
+            if (instance.volatilityService != null)
+                instance.volatilityService.logAll();
+            if (instance.tradeHandler != null)
+                instance.tradeHandler.logAll();
+            if (instance.orderBookHandler != null)
+                instance.orderBookHandler.logAll();
+            if (instance.userDataStreamHandler != null)
+                instance.userDataStreamHandler.logAll();
+            if (instance.strategy != null)
+                instance.strategy.logAll();
+            if (instance.webSocketService != null)
+                instance.webSocketService.logAll();
+            instance.taskManager.logAll();
+        }
     }
 }

@@ -9,6 +9,7 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.tradebot.domain.OrderBook;
 import org.tradebot.listener.OrderBookListener;
+import org.tradebot.util.TaskManager;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -24,13 +25,16 @@ class OrderBookHandlerTest {
     @Mock
     private OrderBookListener listener;
 
+    @Mock
+    private TaskManager taskManager;
+
     @InjectMocks
     private OrderBookHandler orderBookHandler;
 
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        orderBookHandler = new OrderBookHandler("BTCUSDT", apiService);
+        orderBookHandler = new OrderBookHandler("BTCUSDT", apiService, taskManager);
     }
 
     @Test
@@ -40,18 +44,6 @@ class OrderBookHandlerTest {
 
         orderBookHandler.unsubscribe(listener);
         assertFalse(orderBookHandler.listeners.contains(listener));
-    }
-
-    @Test
-    void testInitializeOrderBook_Success() {
-        Map<Double, Double> bids = new ConcurrentHashMap<>();
-        bids.put(1.0, 2.0);
-        Map<Double, Double> asks = new ConcurrentHashMap<>();
-        asks.put(3.0, 4.0);
-        OrderBook mockOrderBook = new OrderBook(123456, asks, bids);
-        when(apiService.getOrderBookPublicAPI(anyString())).thenReturn(mockOrderBook);
-        orderBookHandler.onMessage(new JSONObject().put("u", 123456));
-        assertTrue(orderBookHandler.isOrderBookInitialized);
     }
 
     @Test
@@ -78,16 +70,21 @@ class OrderBookHandlerTest {
         message.put("a", new JSONArray());
         message.put("b", new JSONArray());
         message.put("pu", 123456);
+        orderBookHandler.onMessage(message);
 
+        message.clear();
+        message.put("U", 123456);
+        message.put("u", 123458);
+        message.put("a", new JSONArray());
+        message.put("b", new JSONArray());
+        message.put("pu", 123457);
         orderBookHandler.onMessage(message);
-        orderBookHandler.onMessage(message);
-        assertTrue(orderBookHandler.firstOrderBookMessageReceived);
+        assertTrue(orderBookHandler.isOrderBookInitialized);
     }
 
     @Test
     void testOnMessage_UpdateOrderBook() {
         orderBookHandler.isOrderBookInitialized = true;
-        orderBookHandler.firstOrderBookMessageReceived = true;
         orderBookHandler.orderBookLastUpdateId = 123456;
 
         JSONObject message = new JSONObject();

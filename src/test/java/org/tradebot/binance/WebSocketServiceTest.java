@@ -106,39 +106,19 @@ class WebSocketServiceTest {
     @Test
     void testReconnectWebSocket_withUserStream() {
         when(webSocketService.isReady()).thenReturn(true);
-        when(apiService.getUserStreamKey()).thenReturn("mockListenKey");
-        webSocketService.userDataStream.set(true);
 
         webSocketService.reconnectWebSocket();
 
         verify(webSocketService, times(1)).send(eq("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"btcusdt@trade\"], \"id\": 1}"));
         verify(webSocketService, times(1)).send(eq("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"btcusdt@depth@100ms\"], \"id\": 2}"));
         verify(webSocketService, times(1)).send(eq("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"\"], \"id\": 3}"));
-        verify(apiService, times(1)).removeUserStreamKey();
-        verify(apiService, times(1)).getUserStreamKey();
         verify(taskManager, times(1)).stop("user_data_stream_ping");
-    }
-
-    @Test
-    void testReconnectWebSocket_withoutUserStream() {
-        when(webSocketService.isReady()).thenReturn(true);
-        when(apiService.getUserStreamKey()).thenReturn("mockListenKey");
-        webSocketService.userDataStream.set(false);
-
-        webSocketService.reconnectWebSocket();
-
-        verify(webSocketService, times(1)).send(eq("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"btcusdt@trade\"], \"id\": 1}"));
-        verify(webSocketService, times(1)).send(eq("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"btcusdt@depth@100ms\"], \"id\": 2}"));
-        verify(webSocketService, times(0)).send(eq("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"listenKey\"], \"id\": 3}"));
-        verify(apiService, never()).removeUserStreamKey();
-        verify(apiService, never()).getUserStreamKey();
-        verify(taskManager, never()).stop("user_data_stream_ping");
+        verify(apiService, times(1)).removeUserStreamKey();
+        verify(webSocketService, times(1)).reconnect();
     }
 
     @Test
     void testStopService() {
-        webSocketService.userDataStream.set(true);
-
         webSocketService.stop();
 
         verify(webSocketService, times(1)).send(eq("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"btcusdt@trade\"], \"id\": 1}"));
@@ -148,57 +128,27 @@ class WebSocketServiceTest {
         verify(apiService, times(1)).removeUserStreamKey();
         verify(webSocketService, times(1)).close();
         assertFalse(webSocketService.isReady());
-        assertFalse(webSocketService.userDataStream.get());
     }
 
     @Test
-    void testUpdateUserDataStream_enable() {
+    void testConnectUserDataStream_enable() {
         when(webSocketService.isReady()).thenReturn(true);
         when(apiService.getUserStreamKey()).thenReturn("mockListenKey");
-        webSocketService.userDataStream.set(false);
 
-        webSocketService.updateUserDataStream(true);
+        webSocketService.connectUserDataStream();
 
         verify(apiService, times(1)).getUserStreamKey();
         verify(taskManager, times(1)).create(eq("user_data_stream_ping"), any(), any(), eq(59L), eq(59L), eq(TimeUnit.MINUTES));
         verify(webSocketService, times(1)).send(eq("{\"method\": \"SUBSCRIBE\", \"params\": [\"mockListenKey\"], \"id\": 3}"));
-        assertTrue(webSocketService.userDataStream.get());
     }
 
     @Test
-    void testUpdateUserDataStream_enableWhenWSIsNotReady() {
+    void testConnectUserDataStream_disableWhenWsIsNotReady() {
         when(webSocketService.isReady()).thenReturn(false);
-        webSocketService.userDataStream.set(false);
 
-        webSocketService.updateUserDataStream(true);
-
-        verify(apiService, times(0)).getUserStreamKey();
-        verify(taskManager, times(0)).create(eq("user_data_stream_ping"), any(), any(), anyLong(), anyLong(), any(TimeUnit.class));
-        verify(webSocketService, times(0)).send(anyString());
-        assertTrue(webSocketService.userDataStream.get());
-    }
-
-    @Test
-    void testUpdateUserDataStream_disable() {
-        when(webSocketService.isReady()).thenReturn(true);
-        webSocketService.userDataStream.set(true);
-
-        webSocketService.updateUserDataStream(false);
-
-        verify(apiService, times(1)).removeUserStreamKey();
-        verify(taskManager, times(1)).stop("user_data_stream_ping");
-        assertFalse(webSocketService.userDataStream.get());
-    }
-
-    @Test
-    void testUpdateUserDataStream_disableWhenWsIsNotReady() {
-        when(webSocketService.isReady()).thenReturn(false);
-        webSocketService.userDataStream.set(true);
-
-        webSocketService.updateUserDataStream(false);
+        webSocketService.connectUserDataStream();
 
         verify(apiService, times(0)).removeUserStreamKey();
         verify(taskManager, times(0)).stop(anyString());
-        assertFalse(webSocketService.userDataStream.get());
     }
 }

@@ -21,8 +21,11 @@ import java.util.ArrayList;
 
 import java.util.concurrent.ConcurrentHashMap;
 
+import static org.tradebot.binance.HttpClientService.BASE_URL;
+
 public class RestAPIService {
-    private static final String BASE_URL = "https://fapi.binance.com";
+    public static final String BASE_ASSET = "USDT"; //"BNFCR";
+    public static final double RISK_LEVEL = 0.1; //1;
     private final HttpClientService httpClient;
 
     public RestAPIService(HttpClientService httpClient) {
@@ -177,12 +180,12 @@ public class RestAPIService {
         JSONArray jsonArray = new JSONArray(response);
         for (int i = 0; i < jsonArray.length(); i++) {
             JSONObject asset = jsonArray.getJSONObject(i);
-            if ("BNFCR".equals(asset.getString("asset"))) {
+            if (BASE_ASSET.equals(asset.getString("asset"))) {
                 result = Double.parseDouble(jsonArray.getJSONObject(i).getString("availableBalance"));
             }
         }
 
-        return result;
+        return result * RISK_LEVEL; // what part of account balance is for bot?
     }
 
     public AccountInfo getAccountInfo() {
@@ -242,7 +245,7 @@ public class RestAPIService {
                 .sendPublicRequest(String.format("%s/fapi/v1/depth?symbol=%s&limit=%d", BASE_URL, symbol, 50), true);
 
         if (response.statusCode() == 429) {
-            Log.error("429 got : HTTP rate limit exceed");
+            Log.warn("429 got : HTTP rate limit exceed");
             return new OrderBook(429L, null, null);
         }
         if (response.statusCode() >= 300) {
@@ -336,9 +339,7 @@ public class RestAPIService {
 
         List<Order> orders = new ArrayList<>();
         for (int i = 0; i < jsonArray.length(); i++) {
-            JSONObject orderJson = jsonArray.getJSONObject(i);
-            Order order = getOrder(orderJson);
-            orders.add(order);
+            orders.add(getOrder(jsonArray.getJSONObject(i)));
         }
 
         return orders;
@@ -365,7 +366,7 @@ public class RestAPIService {
         order.setType(Order.Type.valueOf(orderJson.getString("type")));
         order.setNewClientOrderId(orderJson.getString("clientOrderId"));
         order.setStatus(Order.Status.valueOf(orderJson.getString("status")));
-        order.setId(orderJson.getInt("orderId"));
+        order.setId(orderJson.getLong("orderId"));
 
         if (orderJson.has("origQty")) {
             order.setQuantity(orderJson.getDouble("origQty"));

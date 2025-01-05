@@ -1,6 +1,5 @@
 package org.tradebot.binance;
 
-import org.json.JSONObject;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.*;
@@ -13,6 +12,8 @@ import java.util.TreeMap;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
+import static org.tradebot.binance.RestAPIService.BASE_ASSET;
+import static org.tradebot.binance.RestAPIService.RISK_LEVEL;
 
 @SuppressWarnings("unchecked")
 class RestAPIServiceTest {
@@ -32,7 +33,7 @@ class RestAPIServiceTest {
     @Test
     void testPlaceOrder_withAllParams() {
         Order order = new Order();
-        order.setId(123);
+        order.setId(123L);
         order.setSymbol("BTCUSDT");
         order.setSide(Order.Side.BUY);
         order.setType(Order.Type.LIMIT);
@@ -50,7 +51,7 @@ class RestAPIServiceTest {
 
         Order result = restAPIService.placeOrder(order);
 
-        assertEquals(123, result.getId());
+        assertEquals(123L, result.getId());
         assertEquals("BTCUSDT", result.getSymbol());
         assertEquals(Order.Side.BUY, result.getSide());
         assertEquals(Order.Type.LIMIT, result.getType());
@@ -67,7 +68,7 @@ class RestAPIServiceTest {
     @Test
     void testPlaceOrder_withMandatoryParamsOnly() {
         Order order = new Order();
-        order.setId(123);
+        order.setId(123L);
         order.setSymbol("BTCUSDT");
         order.setSide(Order.Side.BUY);
         order.setType(Order.Type.LIMIT);
@@ -78,7 +79,7 @@ class RestAPIServiceTest {
 
         Order result = restAPIService.placeOrder(order);
 
-        assertEquals(123, result.getId());
+        assertEquals(123L, result.getId());
         assertEquals("BTCUSDT", result.getSymbol());
         assertEquals(Order.Side.BUY, result.getSide());
         assertEquals(Order.Type.LIMIT, result.getType());
@@ -115,9 +116,9 @@ class RestAPIServiceTest {
     @Test
     void testGetAccountBalance() {
         when(httpClient.sendRequest(anyString(), anyString(), anyMap()))
-                .thenReturn("[{\"asset\": \"BNFCR\", \"availableBalance\": \"100.5\"}]");
+                .thenReturn(String.format("[{\"asset\": \"%s\", \"availableBalance\": \"100.5\"}]", BASE_ASSET));
         double balance = restAPIService.getAccountBalance();
-        assertEquals(100.5, balance);
+        assertEquals(100.5 * RISK_LEVEL, balance);
     }
 
     @Test

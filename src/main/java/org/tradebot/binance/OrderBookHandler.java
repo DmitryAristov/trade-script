@@ -5,11 +5,16 @@ import org.json.JSONObject;
 import org.tradebot.domain.OrderBook;
 import org.tradebot.listener.OrderBookListener;
 import org.tradebot.util.Log;
+import org.tradebot.util.TaskManager;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
+import java.util.LinkedHashMap;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class OrderBookHandler {
     public static final long DEPTH_UNLOCK_WAIT_TIME_MILLS = 50_000L;
@@ -19,72 +24,95 @@ public class OrderBookHandler {
     protected final Map<Double, Double> bids = new ConcurrentHashMap<>();
     protected final Map<Double, Double> asks = new ConcurrentHashMap<>();
 
+    private final TreeMap<Long, JSONObject> initializationMessagesQueue = new TreeMap<>();
+
     private final RestAPIService apiService;
+    private final TaskManager taskManager;
 
     private long depthEndpointLockTimeMills = -1;
     protected long orderBookLastUpdateId = -1;
+    protected OrderBook snapshot;
     protected boolean isOrderBookInitialized = false;
-    protected boolean firstOrderBookMessageReceived;
 
-    public OrderBookHandler(String symbol, RestAPIService apiService) {
+    public OrderBookHandler(String symbol,
+                            RestAPIService apiService,
+                            TaskManager taskManager) {
         this.symbol = symbol;
         this.apiService = apiService;
+        this.taskManager = taskManager;
+        this.taskManager.create("sout_order_book", this::soutOrderBook, TaskManager.Type.PERIOD, 0, 100, TimeUnit.MILLISECONDS);
         Log.info("service created");
     }
 
     public void onMessage(JSONObject message) {
-        if (!isOrderBookInitialized) {
-            initializeOrderBook();
-            return;
-        }
-
         long updateId = message.getLong("u");
-        if (!firstOrderBookMessageReceived) {
-            if (message.getLong("U") <= orderBookLastUpdateId && updateId >= orderBookLastUpdateId) {
-                updateOrderBook(message, updateId);
-                firstOrderBookMessageReceived = true;
-                Log.info("first order book message received");
-            }
+        if (!isOrderBookInitialized) {
+            initializeOrderBook(updateId, message);
             return;
         }
 
         if (message.getLong("pu") == orderBookLastUpdateId) {
-            updateOrderBook(message, updateId);
+            updateOrderBook(updateId, message);
         } else {
             isOrderBookInitialized = false;
+            Log.info("order book reinitialization required");
         }
     }
 
-    private void initializeOrderBook() {
+    private void initializeOrderBook(long updateId, JSONObject message) {
         if (depthEndpointLockTimeMills != -1 &&
                 System.currentTimeMillis() < depthEndpointLockTimeMills + DEPTH_UNLOCK_WAIT_TIME_MILLS) {
+            Log.info("/depth endpoint is locked due to rate limit");
             return;
         }
 
-        OrderBook orderBook = apiService.getOrderBookPublicAPI(symbol);
-        if (orderBook.lastUpdateId() == 429L) {
+        initializationMessagesQueue.put(updateId, message);
+        if (initializationMessagesQueue.size() <= 10) {
+            snapshot = apiService.getOrderBookPublicAPI(symbol);
+        } else if (initializationMessagesQueue.size() > 25) {
+            initializationMessagesQueue.clear();
+            return;
+        }
+
+        if (snapshot.lastUpdateId() == 429L) {
             isOrderBookInitialized = false;
             depthEndpointLockTimeMills = System.currentTimeMillis();
+            Log.info("rate limit /depth exceed");
             return;
         }
+        Log.info("init order book attempt with message = " + message);
 
-        orderBookLastUpdateId = orderBook.lastUpdateId();
+        orderBookLastUpdateId = snapshot.lastUpdateId();
         asks.clear();
-        asks.putAll(orderBook.asks());
+        asks.putAll(snapshot.asks());
         bids.clear();
-        bids.putAll(orderBook.bids());
-
+        bids.putAll(snapshot.bids());
         depthEndpointLockTimeMills = -1;
-        isOrderBookInitialized = true;
-        firstOrderBookMessageReceived = false;
+
+        AtomicReference<Long> startingPoint = new AtomicReference<>();
+        initializationMessagesQueue.entrySet().stream()
+                .filter(entry -> {
+                    long u = entry.getKey();
+                    return entry.getValue().getLong("U") <= orderBookLastUpdateId && u >= orderBookLastUpdateId;
+                })
+                .findFirst()
+                .ifPresent(u -> startingPoint.set(u.getKey()));
+
+        if (startingPoint.get() != null) {
+            initializationMessagesQueue.entrySet().stream()
+                    .filter(entry -> entry.getKey() >= orderBookLastUpdateId)
+                    .forEach(entry -> updateOrderBook(entry.getKey(), entry.getValue()));
+            isOrderBookInitialized = true;
+            Log.info("order book initialized");
+        }
     }
 
-    private void updateOrderBook(JSONObject data, long u) {
+    private void updateOrderBook(long updateId, JSONObject data) {
         updateOrderBook(data.getJSONArray("a"), asks);
         updateOrderBook(data.getJSONArray("b"), bids);
-        orderBookLastUpdateId = u;
+        orderBookLastUpdateId = updateId;
 
-        if (firstOrderBookMessageReceived && isOrderBookInitialized) {
+        if (isOrderBookInitialized) {
             listeners.forEach(listener -> listener.notifyOrderBookUpdate(asks, bids));
         }
     }
@@ -123,6 +151,25 @@ public class OrderBookHandler {
         Log.debug(String.format("depthEndpointLockTimeMills: %d", depthEndpointLockTimeMills));
         Log.debug(String.format("orderBookLastUpdateId: %s", orderBookLastUpdateId));
         Log.debug(String.format("isOrderBookInitialized: %s", isOrderBookInitialized));
-        Log.debug(String.format("firstOrderBookMessageReceived: %s", firstOrderBookMessageReceived));
+    }
+
+    private void soutOrderBook() {
+        Map<Double, Double> asksTmpMap = new TreeMap<>(asks);
+        Map<Double, Double> bidsTmpMap = new TreeMap<>(bids).descendingMap();
+
+        asksTmpMap = asksTmpMap.entrySet().stream().limit(50).collect(LinkedHashMap::new,
+                (map, entry) -> map.put(entry.getKey(), entry.getValue()),
+                Map::putAll);
+        bidsTmpMap = bidsTmpMap.entrySet().stream().limit(50).collect(LinkedHashMap::new,
+                (map, entry) -> map.put(entry.getKey(), entry.getValue()),
+                Map::putAll);
+
+        Log.removeLines(2, Log.ORDER_BOOK_LOGS_PATH);
+        Log.info("Shorts: " + asksTmpMap, Log.ORDER_BOOK_LOGS_PATH);
+        Log.info("Longs : " + bidsTmpMap, Log.ORDER_BOOK_LOGS_PATH);
+    }
+
+    public void stop() {
+        taskManager.stop("sout_order_book");
     }
 }
