@@ -72,6 +72,7 @@ class RestAPIServiceTest {
         order.setSymbol("BTCUSDT");
         order.setSide(Order.Side.BUY);
         order.setType(Order.Type.LIMIT);
+        order.setNewClientOrderId("testOrder123");
         order.setTimeInForce(Order.TimeInForce.GTC);
 
         String orderJsonStr = readFile("order.json");
@@ -83,7 +84,7 @@ class RestAPIServiceTest {
         assertEquals("BTCUSDT", result.getSymbol());
         assertEquals(Order.Side.BUY, result.getSide());
         assertEquals(Order.Type.LIMIT, result.getType());
-        assertNotNull(result.getNewClientOrderId());
+        assertEquals("testOrder123", result.getNewClientOrderId());
     }
 
     @Test

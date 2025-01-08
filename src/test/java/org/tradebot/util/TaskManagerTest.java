@@ -2,11 +2,7 @@ package org.tradebot.util;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
-import org.tradebot.binance.TradeHandler;
-import org.tradebot.listener.MarketDataListener;
 
 import java.util.concurrent.TimeUnit;
 

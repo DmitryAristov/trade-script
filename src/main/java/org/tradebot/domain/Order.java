@@ -181,7 +181,8 @@ public class Order {
                            newClientOrderId :: %s
                            timeInForce :: %s
                            status :: %s
-                           createTime :: %s""",
+                           createTime :: %s (%d)
+                        """,
                 id,
                 symbol,
                 side,
@@ -194,7 +195,8 @@ public class Order {
                 newClientOrderId,
                 timeInForce,
                 status,
-                createTime == null ? 0 : TimeFormatter.format(createTime));
+                createTime == null ? 0 : TimeFormatter.format(createTime),
+                createTime);
     }
 }
 

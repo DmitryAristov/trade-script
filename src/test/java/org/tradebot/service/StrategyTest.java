@@ -8,15 +8,18 @@ import org.tradebot.binance.RestAPIService;
 import org.tradebot.domain.*;
 import org.tradebot.util.TaskManager;
 
+import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 import static org.mockito.Mockito.*;
 import static org.junit.jupiter.api.Assertions.*;
+import static org.tradebot.service.Strategy.*;
+import static org.tradebot.util.OrderUtils.*;
 
 class StrategyTest {
 
+    private static final long ORDER_ID = 1L;
     private Strategy strategy;
 
     @Mock
@@ -35,97 +38,199 @@ class StrategyTest {
     }
 
     @Test
-    void testNotifyImbalanceStateUpdatePotentialEndPoint() {
-        Imbalance imbalance = mock(Imbalance.class);
-        when(imbalance.getType()).thenReturn(Imbalance.Type.UP);
-        strategy.workingType = WorkingType.WEBSOCKET;
-        strategy.notifyOrderBookUpdate(Map.of(0.3, 100.0), Map.of(0.29, 100.0));
-        strategy.notifyImbalanceStateUpdate(1000, ImbalanceService.State.POTENTIAL_END_POINT, imbalance);
-
-        verify(apiService, times(1))
-                .placeOrder(argThat(argument ->
-                        argument.getSide().equals(Order.Side.SELL) &&
-                        argument.getType().equals(Order.Type.MARKET) &&
-                        argument.getPrice() == null &&
-                        argument.getQuantity().doubleValue() == 3166.00 &&
-                        argument.getStopPrice() == null &&
-                        argument.isClosePosition() == null &&
-                        argument.isReduceOnly() == null &&
-                        "position_open_order".equals(argument.getNewClientOrderId()) &&
-                        argument.getTimeInForce() == null
-                ));
-    }
-
-    @Test
     void testOpenPosition() {
         Imbalance imbalance = mock(Imbalance.class);
         when(imbalance.getType()).thenReturn(Imbalance.Type.UP);
-        when(imbalance.getEndPrice()).thenReturn(0.3);
-        strategy.workingType = WorkingType.WEBSOCKET;
+        strategy.websocketState.set(true);
         strategy.notifyOrderBookUpdate(Map.of(0.3, 100.0), Map.of(0.29, 100.0));
+        Order expected = new Order();
+        expected.setId(ORDER_ID);
+        expected.setSide(Order.Side.SELL);
+        expected.setType(Order.Type.MARKET);
+        expected.setQuantity(3166.00);
+        expected.setNewClientOrderId(OPEN_POSITION_CLIENT_ID);
+
+        when(apiService.placeOrder(argThat(argument -> argument.getNewClientOrderId().equals(expected.getNewClientOrderId())))).thenReturn(expected);
         strategy.notifyImbalanceStateUpdate(1000, ImbalanceService.State.POTENTIAL_END_POINT, imbalance);
 
-        verify(apiService, times(1))
-                .placeOrder(argThat(argument -> argument.getSide().equals(Order.Side.SELL) &&
-                        argument.getType().equals(Order.Type.MARKET) &&
-                        argument.getPrice() == null &&
-                        argument.getQuantity().doubleValue() == 3166.00 &&
-                        argument.getStopPrice() == null &&
-                        argument.isClosePosition() == null &&
-                        argument.isReduceOnly() == null &&
-                        "position_open_order".equals(argument.getNewClientOrderId()) &&
-                        argument.getTimeInForce() == null
-                ));
+        assertTrue(strategy.openedOrders.containsKey(OPEN_POSITION_CLIENT_ID));
+        Order actual = strategy.openedOrders.get(OPEN_POSITION_CLIENT_ID);
+        assertEqualsOrders(expected, actual);
     }
 
     @Test
-    void testPlaceTakes() {
+    void testPlaceTakesAndStop_SuccessWithWebSocket() {
         Imbalance imbalance = mock(Imbalance.class);
         when(imbalance.getType()).thenReturn(Imbalance.Type.UP);
         when(imbalance.getStartPrice()).thenReturn(0.2);
         when(imbalance.getEndPrice()).thenReturn(0.3);
         when(imbalance.size()).thenReturn(0.1);
-        strategy.workingType = WorkingType.WEBSOCKET;
+        strategy.websocketState.set(true);
 
         strategy.notifyOrderBookUpdate(Map.of(0.3, 100.0), Map.of(0.29, 100.0));
+
+        Order take0 = new Order();
+        take0.setId(ORDER_ID);
+        take0.setSide(Order.Side.SELL);
+        take0.setType(Order.Type.LIMIT);
+        take0.setPrice(0.33);
+        take0.setQuantity(1500.00);
+        take0.setReduceOnly(true);
+        take0.setNewClientOrderId(TAKE_CLIENT_ID_PREFIX + 0);
+        take0.setTimeInForce(Order.TimeInForce.GTC);
+
+        Order take1 = new Order();
+        take1.setId(ORDER_ID);
+        take1.setSide(Order.Side.SELL);
+        take1.setType(Order.Type.LIMIT);
+        take1.setPrice(0.38);
+        take1.setQuantity(1500.00);
+        take1.setReduceOnly(true);
+        take1.setNewClientOrderId(TAKE_CLIENT_ID_PREFIX + 1);
+        take1.setTimeInForce(Order.TimeInForce.GTC);
+
+        Order stop = new Order();
+        stop.setId(ORDER_ID);
+        stop.setSide(Order.Side.SELL);
+        stop.setType(Order.Type.STOP_MARKET);
+        stop.setPrice(0.30);
+        stop.setClosePosition(true);
+        stop.setNewClientOrderId(STOP_CLIENT_ID);
+
+        when(apiService.placeOrder(any(Order.class)))
+                .thenReturn(stop);
+        when(apiService.placeBatchOrders(anyCollection()))
+                .thenReturn(List.of(take0, take1));
+
         strategy.notifyImbalanceStateUpdate(1000, ImbalanceService.State.POTENTIAL_END_POINT, imbalance);
-        strategy.orders.put("position_open_order", new Order());
+        strategy.openedOrders.put(OPEN_POSITION_CLIENT_ID, new Order());
         Position position = new Position();
         position.setEntryPrice(0.3);
         position.setPositionAmt(3000);
         when(apiService.getOpenPosition(symbol)).thenReturn(position);
         strategy.position.set(position);
-        strategy.notifyOrderUpdate("position_open_order", "FILLED");
+        strategy.notifyOrderUpdate(OPEN_POSITION_CLIENT_ID, "FILLED");
 
-        verify(apiService, times(1)).placeOrder(argThat(argument ->
-                argument.getSide().equals(Order.Side.SELL) &&
-                argument.getType().equals(Order.Type.LIMIT) &&
-                argument.getPrice().doubleValue() == 0.33 &&
-                argument.getQuantity().doubleValue() == 1500.00 &&
-                argument.getStopPrice() == null &&
-                argument.isClosePosition() == null &&
-                argument.isReduceOnly() &&
-                argument.getTimeInForce() == Order.TimeInForce.GTC));
+        assertTrue(strategy.openedOrders.containsKey(TAKE_CLIENT_ID_PREFIX + 0));
+        Order actualTake0 = strategy.openedOrders.get(TAKE_CLIENT_ID_PREFIX + 0);
+        assertEqualsOrders(take0, actualTake0);
 
-        verify(apiService, times(1)).placeOrder(argThat(argument ->
-                argument.getSide().equals(Order.Side.SELL) &&
-                argument.getType().equals(Order.Type.LIMIT) &&
-                argument.getPrice().doubleValue() == 0.38 &&
-                argument.getQuantity().doubleValue() == 1500.00 &&
-                argument.getStopPrice() == null &&
-                argument.isClosePosition() == null &&
-                argument.isReduceOnly() &&
-                argument.getTimeInForce() == Order.TimeInForce.GTC));
+        assertTrue(strategy.openedOrders.containsKey(TAKE_CLIENT_ID_PREFIX + 1));
+        Order actualTake1 = strategy.openedOrders.get(TAKE_CLIENT_ID_PREFIX + 1);
+        assertEqualsOrders(take1, actualTake1);
 
-        verify(apiService, times(1)).placeOrder(argThat(argument ->
-                argument.getSide().equals(Order.Side.SELL) &&
-                argument.getType().equals(Order.Type.STOP_MARKET) &&
-                argument.getPrice() == null &&
-                argument.getQuantity() == null &&
-                argument.getStopPrice().doubleValue() == 0.30 &&
-                argument.isClosePosition() &&
-                argument.isReduceOnly() == null &&
-                argument.getTimeInForce() == null));
+        assertTrue(strategy.openedOrders.containsKey(STOP_CLIENT_ID));
+        Order actualStop = strategy.openedOrders.get(STOP_CLIENT_ID);
+        assertEqualsOrders(stop, actualStop);
+    }
+
+    @Test
+    void testPlaceTakesAndStop_SuccessWithTask() {
+        Imbalance imbalance = mock(Imbalance.class);
+        when(imbalance.getType()).thenReturn(Imbalance.Type.UP);
+        when(imbalance.getStartPrice()).thenReturn(0.2);
+        when(imbalance.getEndPrice()).thenReturn(0.3);
+        when(imbalance.size()).thenReturn(0.1);
+        strategy.websocketState.set(true);
+
+        strategy.notifyOrderBookUpdate(Map.of(0.3, 100.0), Map.of(0.29, 100.0));
+
+        Order[] take = new Order[TAKE_PROFIT_THRESHOLDS.length];
+        for (int i = 0; i < TAKE_PROFIT_THRESHOLDS.length; i++) {
+            take[i] = new Order();
+            take[i].setId(ORDER_ID);
+            take[i].setSide(Order.Side.SELL);
+            take[i].setType(Order.Type.LIMIT);
+            take[i].setPrice(0.33);
+            take[i].setQuantity(1500.00);
+            take[i].setReduceOnly(true);
+            take[i].setNewClientOrderId(TAKE_CLIENT_ID_PREFIX + i);
+            take[i].setTimeInForce(Order.TimeInForce.GTC);
+        }
+        take[0].setPrice(0.33);
+        take[1].setPrice(0.38);
+
+        Order stop = new Order();
+        stop.setId(ORDER_ID);
+        stop.setSide(Order.Side.SELL);
+        stop.setType(Order.Type.STOP_MARKET);
+        stop.setPrice(0.30);
+        stop.setClosePosition(true);
+        stop.setNewClientOrderId(STOP_CLIENT_ID);
+
+        when(apiService.placeOrder(any(Order.class)))
+                .thenReturn(stop)
+                .thenReturn(take[0])
+                .thenReturn(take[1]);
+
+        strategy.notifyImbalanceStateUpdate(1000, ImbalanceService.State.POTENTIAL_END_POINT, imbalance);
+        strategy.openedOrders.put(OPEN_POSITION_CLIENT_ID, new Order());
+        Position position = new Position();
+        position.setEntryPrice(0.3);
+        position.setPositionAmt(3000);
+        when(apiService.getOpenPosition(symbol)).thenReturn(position);
+        strategy.position.set(position);
+
+        verify(taskManager, times(1)).create(eq("check_stop_order_exists"),
+                any(Runnable.class),
+                eq(TaskManager.Type.DELAYED),
+                eq(TIMEOUT_FORCE_STOP_CREATION),
+                eq(-1L),
+                eq(TimeUnit.MILLISECONDS));
+    }
+
+    @Test
+    void testPlaceTakesAndStop_FailureNoPosition() {
+        Imbalance imbalance = mock(Imbalance.class);
+        when(imbalance.getType()).thenReturn(Imbalance.Type.UP);
+        when(imbalance.getStartPrice()).thenReturn(0.2);
+        when(imbalance.getEndPrice()).thenReturn(0.3);
+        when(imbalance.size()).thenReturn(0.1);
+        strategy.websocketState.set(true);
+        strategy.currentImbalance = imbalance;
+
+        strategy.notifyOrderBookUpdate(Map.of(0.3, 100.0), Map.of(0.29, 100.0));
+
+        Position position = new Position();
+        position.setEntryPrice(0.3);
+        position.setPositionAmt(3000);
+        strategy.position.set(position);
+        when(apiService.getOpenPosition(symbol))
+                .thenReturn(null);
+        strategy.openedOrders.put(OPEN_POSITION_CLIENT_ID, new Order());
+        strategy.notifyImbalanceStateUpdate(1000, ImbalanceService.State.POTENTIAL_END_POINT, imbalance);
+
+        strategy.position.set(null);
+        strategy.notifyOrderUpdate(OPEN_POSITION_CLIENT_ID, "FILLED");
+
+        assertEquals(0, strategy.openedOrders.size());
+        verify(apiService, never()).placeOrder(any(Order.class));
+        verify(taskManager, times(1)).stop(eq("autoclose_position_timer"));
+        verify(apiService, times(1)).cancelAllOpenOrders(eq(symbol));
+    }
+
+    @Test
+    void testPlaceTakesAndStop_FailureNoOpenOrder__alreadyProcessing() {
+        Imbalance imbalance = mock(Imbalance.class);
+        imbalance.setStartPrice(0.2);
+        imbalance.setEndPrice(0.3);
+        strategy.websocketState.set(true);
+        strategy.currentImbalance = imbalance;
+
+        strategy.notifyOrderBookUpdate(Map.of(0.3, 100.0), Map.of(0.29, 100.0));
+
+        Position position = new Position();
+        position.setEntryPrice(0.3);
+        position.setPositionAmt(3000);
+        when(apiService.getOpenPosition(symbol)).thenReturn(position);
+        strategy.position.set(position);
+        strategy.notifyImbalanceStateUpdate(1000, ImbalanceService.State.POTENTIAL_END_POINT, imbalance);
+
+        strategy.position.set(null);
+        strategy.notifyOrderUpdate(OPEN_POSITION_CLIENT_ID, "FILLED");
+
+        assertEquals(0, strategy.openedOrders.size());
+        verify(apiService, never()).placeOrder(any(Order.class));
     }
 
     @Test
@@ -134,17 +239,19 @@ class StrategyTest {
         position.setEntryPrice(0.31);
         position.setPositionAmt(1);
         when(apiService.getOpenPosition(symbol)).thenReturn(position);
+        Order stop = new Order();
+        stop.setId(ORDER_ID);
+        stop.setSide(Order.Side.SELL);
+        stop.setType(Order.Type.MARKET);
+        stop.setClosePosition(true);
+        stop.setNewClientOrderId(TIMEOUT_STOP_CLIENT_ID);
+        when(apiService.placeOrder(argThat(argument -> argument.getNewClientOrderId().equals(stop.getNewClientOrderId())))).thenReturn(stop);
 
-        strategy.closePositionWithTimeout();
+        strategy.closePosition(TIMEOUT_STOP_CLIENT_ID);
 
-        verify(apiService).placeOrder(argThat(argument -> argument.getQuantity() == null &&
-                argument.getSide().equals(Order.Side.SELL) &&
-                argument.getType().equals(Order.Type.MARKET) &&
-                argument.isClosePosition() &&
-                argument.isReduceOnly() == null &&
-                "timeout_stop".equals(argument.getNewClientOrderId()) &&
-                argument.getTimeInForce() == null));
-        assertTrue(strategy.orders.keySet().stream().anyMatch("timeout_stop"::equals));
+        assertTrue(strategy.openedOrders.containsKey(TIMEOUT_STOP_CLIENT_ID));
+        Order actualStop = strategy.openedOrders.get(TIMEOUT_STOP_CLIENT_ID);
+        assertEqualsOrders(stop, actualStop);
     }
 
     @Test
@@ -153,155 +260,86 @@ class StrategyTest {
         position.setEntryPrice(0.31);
         position.setPositionAmt(1);
         when(apiService.getOpenPosition(symbol)).thenReturn(position);
+        Order stop = new Order();
+        stop.setId(ORDER_ID);
+        stop.setSide(Order.Side.SELL);
+        stop.setType(Order.Type.STOP_MARKET);
+        stop.setStopPrice(0.31);
+        stop.setClosePosition(true);
+        stop.setNewClientOrderId(BREAK_EVEN_STOP_CLIENT_ID);
+        when(apiService.placeOrder(argThat(argument -> argument.getNewClientOrderId().equals(stop.getNewClientOrderId())))).thenReturn(stop);
+
         strategy.placeBreakEvenStop();
 
-        verify(apiService).placeOrder(argThat(argument -> argument.getQuantity() == null &&
-                argument.getSide().equals(Order.Side.SELL) &&
-                argument.getType().equals(Order.Type.STOP_MARKET) &&
-                argument.getPrice() == null &&
-                argument.getStopPrice().doubleValue() == 0.31 &&
-                argument.isClosePosition() &&
-                argument.isReduceOnly() == null &&
-                "breakeven_stop".equals(argument.getNewClientOrderId()) &&
-                argument.getTimeInForce() == null));
-        assertTrue(strategy.orders.keySet().stream().anyMatch("breakeven_stop"::equals));
+        assertTrue(strategy.openedOrders.containsKey(BREAK_EVEN_STOP_CLIENT_ID));
+        Order actualStop = strategy.openedOrders.get(BREAK_EVEN_STOP_CLIENT_ID);
+        assertEqualsOrders(stop, actualStop);
     }
 
     @Test
     void testInitialState_() {
         assertNull(strategy.position.get());
-        assertTrue(strategy.orders.isEmpty());
-    }
-
-    @Test
-    void testNotifyImbalanceStateUpdate_PotentialEndPoint() {
-        Imbalance imbalance = mock(Imbalance.class);
-        when(apiService.getAccountBalance()).thenReturn(100.0);
-        when(imbalance.getType()).thenReturn(Imbalance.Type.UP);
-
-        Map<Double, Double> asks = Map.of(10.0, 100.0);
-        strategy.notifyOrderBookUpdate(asks, new ConcurrentHashMap<>());
-
-        strategy.notifyImbalanceStateUpdate(1000L, ImbalanceService.State.POTENTIAL_END_POINT, imbalance);
-
-        verify(apiService).placeOrder(any(Order.class));
-        assertFalse(strategy.orders.isEmpty());
-    }
-
-    @Test
-    void testOpenPosition_InvalidPriceOrQuantity() {
-        Imbalance imbalance = mock(Imbalance.class);
-        when(apiService.getAccountBalance()).thenReturn(0.0);
-        when(imbalance.getType()).thenReturn(Imbalance.Type.UP);
-
-        Map<Double, Double> asks = Map.of(0.0, 100.0);
-        strategy.notifyOrderBookUpdate(asks, new ConcurrentHashMap<>());
-
-        Exception exception = assertThrows(RuntimeException.class, () ->
-                strategy.notifyImbalanceStateUpdate(1000L, ImbalanceService.State.POTENTIAL_END_POINT, imbalance));
-
-        assertTrue(exception.getMessage().contains("Invalid price or quantity"));
-    }
-
-    @Test
-    void testNotifyOrderUpdate_OpenOrderFilled() {
-        Imbalance imbalance = mock(Imbalance.class);
-        when(imbalance.getType()).thenReturn(Imbalance.Type.UP);
-        strategy.currentImbalance = imbalance;
-        Position position = new Position();
-        position.setEntryPrice(0.31);
-        position.setPositionAmt(1);
-        strategy.position.set(position);
-        when(apiService.getOpenPosition(symbol)).thenReturn(position);
-
-        strategy.orders.put("position_open_order", new Order());
-        strategy.notifyOrderUpdate("position_open_order", "FILLED");
-
-        verify(taskManager).create(eq("autoclose_position_timer"), any(Runnable.class), eq(TaskManager.Type.ONCE), eq(4L), eq(-1L), eq(TimeUnit.HOURS));
-    }
-
-    @Test
-    void testNotifyOrderUpdate_TakeOrderFilled() {
-        strategy.orders.put("take_0", new Order());
-        Position position = new Position();
-        position.setEntryPrice(0.31);
-        position.setPositionAmt(1);
-        strategy.position.set(position);
-        when(apiService.getOpenPosition(symbol)).thenReturn(position);
-        strategy.notifyOrderUpdate("take_0", "FILLED");
-
-        verify(apiService).placeOrder(any(Order.class));
+        assertTrue(strategy.openedOrders.isEmpty());
     }
 
     @Test
     void testNotifyOrderUpdate_StopOrderFilled() {
-        strategy.orders.put("stop", new Order());
-        strategy.notifyOrderUpdate("stop", "FILLED");
+        strategy.openedOrders.put(STOP_CLIENT_ID, new Order());
+        strategy.notifyOrderUpdate(STOP_CLIENT_ID, "FILLED");
 
-        assertTrue(strategy.orders.isEmpty());
+        assertTrue(strategy.openedOrders.isEmpty());
     }
 
     @Test
     void testUpdateOrdersState() {
+        Imbalance imbalance = mock(Imbalance.class);
+        imbalance.setStartPrice(0.2);
+        imbalance.setEndPrice(0.3);
+        strategy.currentImbalance = imbalance;
+
         Position position = new Position();
         position.setEntryPrice(0.31);
         position.setPositionAmt(1);
         strategy.position.set(position);
         when(apiService.getOpenPosition(symbol)).thenReturn(position);
+        Order[] take = new Order[TAKE_PROFIT_THRESHOLDS.length];
+        for (int i = 0; i < TAKE_PROFIT_THRESHOLDS.length; i++) {
+            take[i] = new Order();
+            take[i].setId(ORDER_ID);
+            take[i].setSide(Order.Side.SELL);
+            take[i].setType(Order.Type.LIMIT);
+            take[i].setPrice(0.33);
+            take[i].setQuantity(1500.00);
+            take[i].setReduceOnly(true);
+            take[i].setNewClientOrderId(TAKE_CLIENT_ID_PREFIX + i);
+            take[i].setTimeInForce(Order.TimeInForce.GTC);
+        }
+        take[0].setPrice(0.33);
+        take[1].setPrice(0.38);
+
+        Order stop = new Order();
+        stop.setId(ORDER_ID);
+        stop.setSide(Order.Side.SELL);
+        stop.setType(Order.Type.STOP_MARKET);
+        stop.setPrice(0.30);
+        stop.setClosePosition(true);
+        stop.setNewClientOrderId(STOP_CLIENT_ID);
+
+        when(apiService.placeOrder(any(Order.class)))
+                .thenReturn(stop)
+                .thenReturn(take[0])
+                .thenReturn(take[1]);
 
         Order openOrder = new Order();
-        openOrder.setNewClientOrderId("position_open_order");
+        openOrder.setNewClientOrderId(OPEN_POSITION_CLIENT_ID);
         openOrder.setStatus(Order.Status.FILLED);
+        strategy.openedOrders.put(OPEN_POSITION_CLIENT_ID, openOrder);
 
-        strategy.orders.put("position_open_order", openOrder);
         when(apiService.queryOrder(any(Order.class))).thenReturn(openOrder);
 
         strategy.updateOrdersState();
 
         verify(apiService, times(1)).queryOrder(openOrder);
-    }
-
-    @Test
-    void testPlaceClosingOrders_Successful() {
-        Position position = new Position();
-        position.setEntryPrice(0.31);
-        position.setPositionAmt(1);
-        strategy.position.set(position);
-        strategy.currentImbalance = mock(Imbalance.class);
-        when(apiService.getOpenPosition(symbol)).thenReturn(position);
-
-        strategy.placeClosingOrders();
-
-        verify(apiService, times(3)).placeOrder(any(Order.class));
-    }
-
-    @Test
-    void testPlaceClosingOrders_Failure() {
-        Position position = new Position();
-        position.setEntryPrice(0.31);
-        position.setPositionAmt(1);
-        strategy.position.set(position);
-        strategy.currentImbalance = mock(Imbalance.class);
-        when(apiService.getOpenPosition(symbol)).thenReturn(position);
-
-        when(apiService.placeOrder(argThat(order -> order.getNewClientOrderId().equals("stop")))).thenThrow(new RuntimeException("Failed"));
-
-        strategy.placeClosingOrders();
-
-        verify(apiService, atLeast(3)).placeOrder(argThat(order -> order.getNewClientOrderId().equals("stop")));
-    }
-
-    @Test
-    void testClosePositionWithTimeout_() {
-        Position position = new Position();
-        position.setEntryPrice(0.31);
-        position.setPositionAmt(1);
-        strategy.position.set(position);
-        when(apiService.getOpenPosition(symbol)).thenReturn(position);
-
-        strategy.closePositionWithTimeout();
-
-        verify(apiService).placeOrder(any(Order.class));
     }
 
     @Test
@@ -314,6 +352,19 @@ class StrategyTest {
     void testNotifyWebsocketStateChanged_WebsocketNotReady() {
         strategy.position.set(new Position());
         strategy.notifyWebsocketStateChanged(false);
-        verify(taskManager).create(eq("check_orders_api_mode"), any(Runnable.class), eq(TaskManager.Type.PERIOD), eq(0L), eq(1L), eq(TimeUnit.SECONDS));
+        verify(taskManager).create(eq("check_orders_api_mode"), any(Runnable.class), eq(TaskManager.Type.PERIOD), eq(0L), eq(10L), eq(TimeUnit.SECONDS));
+    }
+
+    public static void assertEqualsOrders(Order expected, Order actual) {
+        assertEquals(expected.getId(), actual.getId());
+        assertEquals(expected.getSide(), actual.getSide());
+        assertEquals(expected.getType(), actual.getType());
+        assertEquals(expected.getPrice(), actual.getPrice());
+        assertEquals(expected.getQuantity(), actual.getQuantity());
+        assertEquals(expected.getStopPrice(), actual.getStopPrice());
+        assertEquals(expected.isClosePosition(), actual.isClosePosition());
+        assertEquals(expected.isReduceOnly(), actual.isReduceOnly());
+        assertEquals(expected.getTimeInForce(), actual.getTimeInForce());
+        assertEquals(expected.getNewClientOrderId(), actual.getNewClientOrderId());
     }
 }

@@ -6,11 +6,10 @@ import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
-import org.tradebot.listener.UserDataListener;
-import org.tradebot.binance.UserDataHandler;
+import org.tradebot.listener.UserDataCallback;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.*;
-import static org.junit.jupiter.api.Assertions.*;
 
 class UserDataHandlerTest {
 
@@ -18,7 +17,7 @@ class UserDataHandlerTest {
     private UserDataHandler userDataHandler;
 
     @Mock
-    private UserDataListener listener;
+    private UserDataCallback callback;
 
     @BeforeEach
     void setUp() {
@@ -26,11 +25,9 @@ class UserDataHandlerTest {
     }
 
     @Test
-    void testSubscribeAndUnsubscribe() {
-        userDataHandler.subscribe(listener);
-        assertTrue(userDataHandler.listeners.contains(listener));
-        userDataHandler.unsubscribe(listener);
-        assertFalse(userDataHandler.listeners.contains(listener));
+    void testSetCallback() {
+        userDataHandler.setCallback(callback);
+        assertEquals(userDataHandler.callback, callback);
     }
 
     @Test
@@ -39,10 +36,10 @@ class UserDataHandlerTest {
                 .put("X", "FILLED")
                 .put("c", "testClientId");
         JSONObject message = new JSONObject().put("o", orderJson);
-        doNothing().when(listener).notifyOrderUpdate("testClientId", "FILLED");
-        userDataHandler.subscribe(listener);
+        doNothing().when(callback).notifyOrderUpdate("testClientId", "FILLED");
+        userDataHandler.setCallback(callback);
         userDataHandler.onMessage("ORDER_TRADE_UPDATE", message);
-        verify(listener).notifyOrderUpdate("testClientId", "FILLED");
+        verify(callback).notifyOrderUpdate("testClientId", "FILLED");
     }
 
     @Test
@@ -52,6 +49,6 @@ class UserDataHandlerTest {
                 .put("c", "testClientId");
         JSONObject message = new JSONObject().put("o", orderJson);
         userDataHandler.onMessage("INVALID_EVENT", message);
-        verify(listener, never()).notifyOrderUpdate(anyString(), anyString());
+        verify(callback, never()).notifyOrderUpdate(anyString(), anyString());
     }
 }

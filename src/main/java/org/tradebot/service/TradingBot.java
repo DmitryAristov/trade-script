@@ -32,9 +32,9 @@ public class TradingBot {
     protected TradingBot(String symbol, int leverage) {
         this.symbol = symbol;
         this.leverage = leverage;
-        Log.info(String.format("%s bot created with leverage %d", symbol, leverage));
+        Log.info(String.format("'%s' bot created with leverage :: %d", symbol, leverage));
         precision = apiService.fetchSymbolPrecision(symbol);
-        Log.info(String.format("precision: %s", precision));
+        Log.info("precision :: " + precision);
     }
 
     protected final HttpClientService httpClient = new HttpClientService();
@@ -51,17 +51,17 @@ public class TradingBot {
     public void start() {
         AccountInfo accountInfo = apiService.getAccountInfo();
         if (!accountInfo.canTrade()) {
-            throw Log.error("account cannot trade");
+            throw new RuntimeException("account cannot trade");
         }
 
         double balance = accountInfo.availableBalance();
         if (balance <= 0) {
-            throw Log.error("no available balance to trade");
+            throw new RuntimeException("no available balance to trade");
         }
 
         apiService.setLeverage(symbol, leverage);
         if (apiService.getLeverage(symbol) != leverage) {
-            throw Log.error("leverage is incorrect");
+            throw new RuntimeException("leverage is incorrect");
         }
 
         imbalanceService = new ImbalanceService();
@@ -72,28 +72,29 @@ public class TradingBot {
         volatilityService = new VolatilityService(symbol, apiService, taskManager);
         strategy = new Strategy(symbol, leverage, apiService, taskManager);
 
-        imbalanceService.subscribe(strategy);
-        tradeHandler.subscribe(imbalanceService);
-        volatilityService.subscribe(imbalanceService);
-        orderBookHandler.subscribe(strategy);
-        userDataStreamHandler.subscribe(strategy);
-        webSocketService.subscribe(strategy);
-
+        imbalanceService.setCallback(strategy);
+        tradeHandler.setCallback(imbalanceService);
+        volatilityService.setCallback(imbalanceService);
+        orderBookHandler.setCallback(strategy);
+        userDataStreamHandler.setCallback(strategy);
+        webSocketService.setCallback(strategy);
         webSocketService.connect();
+
         Log.info("bot started");
     }
 
-    public void stop() {
-        imbalanceService.unsubscribe(strategy);
-        volatilityService.unsubscribe(imbalanceService);
-        tradeHandler.unsubscribe(imbalanceService);
-        orderBookHandler.unsubscribe(strategy);
-        userDataStreamHandler.unsubscribe(strategy);
-        webSocketService.unsubscribe(strategy);
+    public static void exit(String message) {
+        Log.info("exiting from bot :: '" + message + "'");
 
-        taskManager.stopAll();
-        webSocketService.stop();
-        Log.info("bot stopped");
+        try {
+            TradingBot.logAll();
+            TradingBot.getInstance().webSocketService.stop();
+            TradingBot.getInstance().taskManager.stopAll();
+        } catch (Exception e) {
+            Log.warn(e);
+        }
+
+        System.exit(0);
     }
 
     public static void logAll() {

@@ -2,20 +2,18 @@ package org.tradebot.binance;
 
 import org.json.JSONObject;
 import org.tradebot.domain.MarketEntry;
-import org.tradebot.listener.MarketDataListener;
+import org.tradebot.listener.MarketDataCallback;
 import org.tradebot.util.Log;
 import org.tradebot.util.TaskManager;
 
 import java.util.ArrayDeque;
-import java.util.ArrayList;
 import java.util.Deque;
-import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 public class TradeHandler {
 
     private static final int MAX_TRADE_QUEUE_SIZE = 100000;
-    protected final List<MarketDataListener> listeners = new ArrayList<>();
+    protected MarketDataCallback callback;
 
     protected Deque<JSONObject> activeQueue = new ArrayDeque<>(MAX_TRADE_QUEUE_SIZE);
     protected Deque<JSONObject> processingQueue = new ArrayDeque<>(MAX_TRADE_QUEUE_SIZE);
@@ -65,10 +63,11 @@ public class TradeHandler {
             if (entry == null) {
                 return;
             }
-            Log.removeLines(1, Log.MARKET_DATA_LOGS_PATH);
-            Log.info("entry: " + entry, Log.MARKET_DATA_LOGS_PATH);
+//            Log.removeLines(1, Log.MARKET_DATA_LOGS_PATH);
+            Log.info("entry :: " + entry, Log.MARKET_DATA_LOGS_PATH);
 
-            listeners.forEach(listener -> listener.notifyNewMarketEntry(openTime, entry));
+            if (callback != null)
+                callback.notifyNewMarketEntry(openTime, entry);
         } catch (Exception e) {
             throw Log.error(e);
         }
@@ -87,22 +86,22 @@ public class TradeHandler {
         return entry;
     }
 
-    public void subscribe(MarketDataListener listener) {
-        if (!listeners.contains(listener)) {
-            listeners.add(listener);
-            Log.info(String.format("listener added %s", listener.getClass().getName()));
-        }
-    }
-
-    public void unsubscribe(MarketDataListener listener) {
-        listeners.remove(listener);
-        Log.info(String.format("listener removed %s", listener.getClass().getName()));
+    public void setCallback(MarketDataCallback callback) {
+        this.callback = callback;
+        Log.info(String.format("callback added %s", callback.getClass().getName()));
     }
 
     public void logAll() {
-        Log.debug(String.format("listeners: %s", listeners));
-        Log.debug(String.format("activeQueue: %s", activeQueue));
-        Log.debug(String.format("processingQueue: %s", processingQueue));
-        Log.debug(String.format("lastPrice: %s", lastPrice));
+        Log.debug(String.format("""
+                        callback: %s
+                        activeQueue: %s
+                        processingQueue: %s
+                        lastPrice: %s
+                        """,
+                callback,
+                activeQueue,
+                processingQueue,
+                lastPrice
+        ));
     }
 }

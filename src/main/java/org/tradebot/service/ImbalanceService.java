@@ -2,9 +2,9 @@ package org.tradebot.service;
 
 import org.tradebot.domain.Imbalance;
 import org.tradebot.domain.MarketEntry;
-import org.tradebot.listener.ImbalanceStateListener;
-import org.tradebot.listener.MarketDataListener;
-import org.tradebot.listener.VolatilityListener;
+import org.tradebot.listener.ImbalanceStateCallback;
+import org.tradebot.listener.MarketDataCallback;
+import org.tradebot.listener.VolatilityCallback;
 import org.tradebot.util.Log;
 
 import java.util.ArrayList;
@@ -13,9 +13,11 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.NavigableMap;
 import java.util.TreeMap;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
+import java.util.Random;
 
-public class ImbalanceService implements VolatilityListener, MarketDataListener {
+public class ImbalanceService implements VolatilityCallback, MarketDataCallback {
 
     public enum State {
         WAIT,
@@ -94,13 +96,13 @@ public class ImbalanceService implements VolatilityListener, MarketDataListener 
                 SPEED_MODIFICATOR,
                 PRICE_MODIFICATOR,
                 MAX_VALID_IMBALANCE_PART,
-                MIN_IMBALANCE_TIME_DURATION/1000,
-                MIN_POTENTIAL_COMPLETE_TIME/1000,
-                MIN_COMPLETE_TIME/1000,
-                DATA_LIVE_TIME/60_000L,
-                LARGE_DATA_LIVE_TIME/60_000L,
-                LARGE_DATA_ENTRY_SIZE/1000,
-                TIME_CHECK_CONTR_IMBALANCE/60_000L,
+                TimeUnit.MILLISECONDS.toSeconds(MIN_IMBALANCE_TIME_DURATION),
+                TimeUnit.MILLISECONDS.toSeconds(MIN_POTENTIAL_COMPLETE_TIME),
+                TimeUnit.MILLISECONDS.toSeconds(MIN_COMPLETE_TIME),
+                TimeUnit.MILLISECONDS.toMinutes(DATA_LIVE_TIME),
+                TimeUnit.MILLISECONDS.toMinutes(LARGE_DATA_LIVE_TIME),
+                TimeUnit.MILLISECONDS.toSeconds(LARGE_DATA_ENTRY_SIZE),
+                TimeUnit.MILLISECONDS.toMinutes(TIME_CHECK_CONTR_IMBALANCE),
                 RETURNED_PRICE_IMBALANCE_PARTITION));
     }
 
@@ -199,17 +201,16 @@ public class ImbalanceService implements VolatilityListener, MarketDataListener 
 
         imbalances.add(imbalance);
         double maxImbalanceSize = imbalances.stream().max(Comparator.comparing(Imbalance::size)).get().size();
-        Log.info(String.format("filtering from %d imbalances with a largest size: %.2f", imbalances.size(), maxImbalanceSize));
+        Log.info(String.format("filtering from %d imbalances with a largest size :: %.2f", imbalances.size(), maxImbalanceSize));
         currentImbalance = imbalances.stream()
                 .filter(imbalance_ -> imbalance_.size() >= maxImbalanceSize * 0.75)
                 .max(Comparator.comparing(Imbalance::speed))
                 .orElseThrow();
 
-        Log.info(String.format("found imbalance: %s. let's check is it valid?", currentImbalance));
+        Log.info(String.format("found imbalance :: %s. let's check is it valid?", currentImbalance));
         if (isValid(currentImbalance)) {
             currentState = State.PROGRESS;
-            listeners.forEach(listener -> listener.notifyImbalanceStateUpdate(currentTime, currentState, currentImbalance));
-            Log.info(currentImbalance.getType() + " started: " + currentImbalance, seconds.lastKey());
+            Log.info(currentImbalance.getType() + " started :: " + currentImbalance, seconds.lastKey());
         } else {
             currentImbalance = null;
         }
@@ -228,7 +229,7 @@ public class ImbalanceService implements VolatilityListener, MarketDataListener 
                     case UP -> entry.getValue().high() > imbalance.getEndPrice();
                     case DOWN -> entry.getValue().low() < imbalance.getEndPrice();
                 });
-        Log.info(String.format("is there is local price extrema between start and end of imbalance? %s", localExtremaBetweenStartEndPricesExists));
+        Log.info(String.format("is there is local price extrema between start and end of imbalance ?? %s", localExtremaBetweenStartEndPricesExists));
         boolean contrImbalanceExists = largeData.entrySet().stream()
                 .filter(entry -> entry.getKey() <= imbalance.getStartTime() &&
                         entry.getKey() >= imbalance.getStartTime() - TIME_CHECK_CONTR_IMBALANCE)
@@ -255,7 +256,8 @@ public class ImbalanceService implements VolatilityListener, MarketDataListener 
 
         if (checkPotentialEndPointCondition(currentTime, currentEntry)) {
             currentState = State.POTENTIAL_END_POINT;
-            listeners.forEach(listener -> listener.notifyImbalanceStateUpdate(currentTime, currentState, currentImbalance));
+            if (callback != null)
+                callback.notifyImbalanceStateUpdate(currentTime, currentState, currentImbalance);
         }
     }
 
@@ -265,8 +267,6 @@ public class ImbalanceService implements VolatilityListener, MarketDataListener 
                 if (currentEntry.high() > currentImbalance.getEndPrice()) {
                     currentImbalance.setEndPrice(currentEntry.high());
                     currentImbalance.setEndTime(currentTime);
-                    if (currentState != State.PROGRESS)
-                        listeners.forEach(listener -> listener.notifyImbalanceStateUpdate(currentTime, currentState, currentImbalance));
                     currentState = State.PROGRESS;
                     return true;
                 }
@@ -275,8 +275,6 @@ public class ImbalanceService implements VolatilityListener, MarketDataListener 
                 if (currentEntry.low() < currentImbalance.getEndPrice()) {
                     currentImbalance.setEndPrice(currentEntry.low());
                     currentImbalance.setEndTime(currentTime);
-                    if (currentState != State.PROGRESS)
-                        listeners.forEach(listener -> listener.notifyImbalanceStateUpdate(currentTime, currentState, currentImbalance));
                     currentState = State.PROGRESS;
                     return true;
                 }
@@ -386,32 +384,40 @@ public class ImbalanceService implements VolatilityListener, MarketDataListener 
         Log.info("state reset to initial");
     }
 
-    private final List<ImbalanceStateListener> listeners = new ArrayList<>();
+    private ImbalanceStateCallback callback;
 
-    public void subscribe(ImbalanceStateListener listener) {
-        if (!listeners.contains(listener)) {
-            listeners.add(listener);
-            Log.info(String.format("listener added %s", listener.getClass().getName()));
-        }
-    }
-
-    public void unsubscribe(ImbalanceStateListener listener) {
-        listeners.remove(listener);
-        Log.info(String.format("listener removed %s", listener.getClass().getName()));
+    public void setCallback(ImbalanceStateCallback callback) {
+        this.callback = callback;
+        Log.info(String.format("listener added %s", callback.getClass().getName()));
     }
 
     public void logAll() {
-        Log.debug(String.format("priceChangeThreshold: %.2f", priceChangeThreshold));
-        Log.debug(String.format("speedThreshold: %.2f", speedThreshold));
-        Log.debug(String.format("currentState: %s", currentState));
-        Log.debug(String.format("currentImbalance: %s", currentImbalance));
-        Log.debug(String.format("seconds: %s", seconds));
-        Log.debug(String.format("largeData: %s", largeData));
-        Log.debug(String.format("currentMinuteHigh: %.2f", currentMinuteHigh));
-        Log.debug(String.format("currentMinuteLow: %.2f", currentMinuteLow));
-        Log.debug(String.format("currentMinuteVolume: %.2f", currentMinuteVolume));
-        Log.debug(String.format("lastMinuteTimestamp: %d", lastMinuteTimestamp));
-        Log.debug(String.format("imbalances: %s", imbalances));
-        Log.debug(String.format("listeners: %s", listeners));
+        Log.debug(String.format("""
+                priceChangeThreshold: %.2f
+                speedThreshold: %.2f
+                currentState: %s
+                currentImbalance: %s
+                seconds: %s
+                largeData: %s
+                currentMinuteHigh: %.2f
+                currentMinuteLow: %.2f
+                currentMinuteVolume: %.2f
+                lastMinuteTimestamp: %d
+                imbalances: %s
+                callback: %s
+                """,
+                priceChangeThreshold,
+                speedThreshold,
+                currentState,
+                currentImbalance,
+                seconds,
+                largeData,
+                currentMinuteHigh,
+                currentMinuteLow,
+                currentMinuteVolume,
+                lastMinuteTimestamp,
+                imbalances,
+                callback
+        ));
     }
 }

@@ -7,7 +7,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.tradebot.domain.MarketEntry;
-import org.tradebot.listener.MarketDataListener;
+import org.tradebot.listener.MarketDataCallback;
 import org.tradebot.util.TaskManager;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -19,7 +19,7 @@ class TradeHandlerTest {
     private TradeHandler tradeHandler;
 
     @Mock
-    private MarketDataListener listener;
+    private MarketDataCallback callback;
 
     @Mock
     private TaskManager taskManager;
@@ -32,11 +32,8 @@ class TradeHandlerTest {
 
     @Test
     void testSubscribeAndUnsubscribe() {
-        tradeHandler.subscribe(listener);
-        assertTrue(tradeHandler.listeners.contains(listener));
-
-        tradeHandler.unsubscribe(listener);
-        assertFalse(tradeHandler.listeners.contains(listener));
+        tradeHandler.setCallback(callback);
+        assertEquals(tradeHandler.callback, callback);
     }
 
     @Test
@@ -53,10 +50,10 @@ class TradeHandlerTest {
         JSONObject trade2 = new JSONObject().put("p", "200.5").put("q", "20.0");
         tradeHandler.activeQueue.add(trade1);
         tradeHandler.activeQueue.add(trade2);
-        doNothing().when(listener).notifyNewMarketEntry(anyLong(), any());
-        tradeHandler.subscribe(listener);
+        doNothing().when(callback).notifyNewMarketEntry(anyLong(), any());
+        tradeHandler.setCallback(callback);
         tradeHandler.updateMarketData();
-        verify(listener).notifyNewMarketEntry(anyLong(), any(MarketEntry.class));
+        verify(callback).notifyNewMarketEntry(anyLong(), any(MarketEntry.class));
         assertTrue(tradeHandler.processingQueue.isEmpty());
     }
 
@@ -64,10 +61,10 @@ class TradeHandlerTest {
     void testUpdateMarketData_EmptyQueue() {
         tradeHandler.lastPrice = 150.0;
         tradeHandler.activeQueue.clear();
-        doNothing().when(listener).notifyNewMarketEntry(anyLong(), any());
-        tradeHandler.subscribe(listener);
+        doNothing().when(callback).notifyNewMarketEntry(anyLong(), any());
+        tradeHandler.setCallback(callback);
         tradeHandler.updateMarketData();
-        verify(listener).notifyNewMarketEntry(anyLong(), any(MarketEntry.class));
+        verify(callback).notifyNewMarketEntry(anyLong(), any(MarketEntry.class));
     }
 
     @Test

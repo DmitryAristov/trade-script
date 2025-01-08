@@ -25,7 +25,8 @@ import static org.tradebot.binance.HttpClientService.BASE_URL;
 
 public class RestAPIService {
     public static final String BASE_ASSET = "USDT"; //"BNFCR";
-    public static final double RISK_LEVEL = 0.1; //1;
+    //TODO: issue with not full quantity
+    public static final double RISK_LEVEL = 0.25;
     private final HttpClientService httpClient;
 
     public RestAPIService(HttpClientService httpClient) {
@@ -34,14 +35,13 @@ public class RestAPIService {
 
     public Order placeOrder(Order order) {
         Map<String, String> params = new HashMap<>();
+        validateOrder(order);
 
         // mandatory params
         params.put("symbol", order.getSymbol());
         params.put("side", order.getSide().toString());
         params.put("type", order.getType().toString());
-        if (order.getType() == Order.Type.LIMIT && order.getTimeInForce() == null) {
-            throw Log.error("timeInForce required for LIMIT order");
-        }
+        params.put("newClientOrderId", String.valueOf(order.getNewClientOrderId()));
 
         // optional params
         if (order.getPrice() != null) {
@@ -59,9 +59,6 @@ public class RestAPIService {
         if (order.isClosePosition() != null) {
             params.put("closePosition", String.valueOf(order.isClosePosition()));
         }
-        if (order.getNewClientOrderId() != null) {
-            params.put("newClientOrderId", String.valueOf(order.getNewClientOrderId()));
-        }
         if (order.getTimeInForce() != null) {
             params.put("timeInForce", String.valueOf(order.getTimeInForce()));
         }
@@ -69,19 +66,18 @@ public class RestAPIService {
         return getOrder(new JSONObject(httpClient.sendRequest("/fapi/v1/order", "POST", params, true)));
     }
 
-    public void placeBatchOrders(Collection<Order> orders) {
+    public List<Order> placeBatchOrders(Collection<Order> orders) {
         JSONArray batchOrders = new JSONArray();
 
         orders.forEach(order -> {
             Map<String, String> params = new HashMap<>();
+            validateOrder(order);
 
             // mandatory params
             params.put("symbol", order.getSymbol());
             params.put("side", order.getSide().toString());
             params.put("type", order.getType().toString());
-            if (order.getType() == Order.Type.LIMIT && order.getTimeInForce() == null) {
-                throw Log.error("timeInForce required for LIMIT order");
-            }
+            params.put("newClientOrderId", String.valueOf(order.getNewClientOrderId()));
 
             // optional params
             if (order.getPrice() != null) {
@@ -99,9 +95,6 @@ public class RestAPIService {
             if (order.isClosePosition() != null) {
                 params.put("closePosition", String.valueOf(order.isClosePosition()));
             }
-            if (order.getNewClientOrderId() != null) {
-                params.put("newClientOrderId", String.valueOf(order.getNewClientOrderId()));
-            }
             if (order.getTimeInForce() != null) {
                 params.put("timeInForce", String.valueOf(order.getTimeInForce()));
             }
@@ -113,14 +106,53 @@ public class RestAPIService {
         params.put("batchOrders", batchOrders.toString());
         params.put("recvWindow", "5000");
 
-        httpClient.sendRequest("/fapi/v1/batchOrders", "POST", params, true);
+        String response = httpClient.sendRequest("/fapi/v1/batchOrders", "POST", params, true);
+        JSONArray jsonArray = new JSONArray(response);
+        List<Order> result = new ArrayList<>();
+        for (int i = 0; i < jsonArray.length(); i++) {
+            try {
+                result.add(getOrder(jsonArray.getJSONObject(i)));
+            } catch (Exception e) {
+                Log.warn(e);
+                JSONObject jsonObject = new JSONObject(jsonArray.get(i));
+                if (jsonObject.has("code") && jsonObject.has("msg")) {
+                    throw new RuntimeException(jsonObject.getString("msg"));
+                }
+            }
+        }
+        return result;
+    }
+
+    private void validateOrder(Order order) {
+        if (order.getSymbol() == null) {
+            throw Log.error("empty symbol :: " + order);
+        }
+        if (order.getPrice() != null && order.getPrice().doubleValue() <= 0) {
+            throw Log.error("Invalid price :: " + order.getPrice());
+        }
+        if (order.getQuantity() != null && order.getQuantity().doubleValue() <= 0) {
+            throw Log.error("Invalid quantity :: " + order.getQuantity());
+        }
+        if (order.getStopPrice() != null && order.getStopPrice().doubleValue() <= 0) {
+            throw Log.error("Invalid stop price :: " + order.getStopPrice());
+        }
+        if (order.getNewClientOrderId() == null) {
+            throw Log.error("client id is null");
+        }
+        if (order.getType() == Order.Type.LIMIT && order.getTimeInForce() == null) {
+            throw Log.error("timeInForce required for LIMIT order");
+        }
     }
 
     public void cancelOrder(Order order) {
         Map<String, String> params = new HashMap<>();
 
         params.put("symbol", order.getSymbol());
-        params.put("origClientOrderId", order.getNewClientOrderId());
+        if (order.getId() != null) {
+            params.put("orderId", String.valueOf(order.getId()));
+        } else {
+            params.put("origClientOrderId", String.valueOf(order.getNewClientOrderId()));
+        }
         params.put("recvWindow", "5000");
 
         httpClient.sendRequest("/fapi/v1/order", "DELETE", params);
@@ -245,7 +277,7 @@ public class RestAPIService {
                 .sendPublicRequest(String.format("%s/fapi/v1/depth?symbol=%s&limit=%d", BASE_URL, symbol, 50), true);
 
         if (response.statusCode() == 429) {
-            Log.warn("429 got : HTTP rate limit exceed");
+            Log.warn("429 got :: HTTP rate limit exceed");//TODO
             return new OrderBook(429L, null, null);
         }
         if (response.statusCode() >= 300) {
@@ -367,6 +399,11 @@ public class RestAPIService {
         order.setNewClientOrderId(orderJson.getString("clientOrderId"));
         order.setStatus(Order.Status.valueOf(orderJson.getString("status")));
         order.setId(orderJson.getLong("orderId"));
+        if (orderJson.has("time")) {
+            order.setCreateTime(orderJson.getLong("time"));
+        } else if (orderJson.has("updateTime")) {
+            order.setCreateTime(orderJson.getLong("updateTime"));
+        }
 
         if (orderJson.has("origQty")) {
             order.setQuantity(orderJson.getDouble("origQty"));

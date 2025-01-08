@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.tradebot.domain.MarketEntry;
-import org.tradebot.listener.ImbalanceStateListener;
+import org.tradebot.listener.ImbalanceStateCallback;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -17,13 +17,13 @@ class ImbalanceServiceTest {
     private ImbalanceService imbalanceService;
 
     @Mock
-    private ImbalanceStateListener mockListener;
+    private ImbalanceStateCallback mockCallback;
 
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
         imbalanceService = new ImbalanceService();
-        imbalanceService.subscribe(mockListener);
+        imbalanceService.setCallback(mockCallback);
     }
 
     @Test
@@ -46,7 +46,7 @@ class ImbalanceServiceTest {
             imbalanceService.notifyNewMarketEntry(i * 1000, new MarketEntry(98000. + i * 100, 97900 + i * 100, 0));
         }
         assertEquals(ImbalanceService.State.PROGRESS, imbalanceService.currentState);
-        verify(mockListener, times(1)).notifyImbalanceStateUpdate(eq(20000L), eq(ImbalanceService.State.PROGRESS),
+        verify(mockCallback, times(1)).notifyImbalanceStateUpdate(eq(20000L), eq(ImbalanceService.State.PROGRESS),
                 argThat(imbalance -> imbalance.getStartPrice() == 97900. &&
                         imbalance.getEndPrice() == 100000. &&
                         imbalance.getStartTime() == 0L &&
@@ -60,7 +60,7 @@ class ImbalanceServiceTest {
             imbalanceService.notifyNewMarketEntry(i * 1000, new MarketEntry(98000. + i * 100, 97900 + i * 100, 0));
         }
         assertEquals(ImbalanceService.State.PROGRESS, imbalanceService.currentState);
-        verify(mockListener).notifyImbalanceStateUpdate(eq(20000L), eq(ImbalanceService.State.PROGRESS), any());
+        verify(mockCallback).notifyImbalanceStateUpdate(eq(20000L), eq(ImbalanceService.State.PROGRESS), any());
         assertEquals(21000L, imbalanceService.currentImbalance.getEndTime());
         assertEquals(100100., imbalanceService.currentImbalance.getEndPrice());
     }
@@ -80,8 +80,8 @@ class ImbalanceServiceTest {
         }
 
         assertEquals(ImbalanceService.State.POTENTIAL_END_POINT, imbalanceService.currentState);
-        verify(mockListener, times(1)).notifyImbalanceStateUpdate(eq(20000L), eq(ImbalanceService.State.PROGRESS), any());
-        verify(mockListener, times(1)).notifyImbalanceStateUpdate(eq(23000L), eq(ImbalanceService.State.POTENTIAL_END_POINT), any());
+        verify(mockCallback, times(1)).notifyImbalanceStateUpdate(eq(20000L), eq(ImbalanceService.State.PROGRESS), any());
+        verify(mockCallback, times(1)).notifyImbalanceStateUpdate(eq(23000L), eq(ImbalanceService.State.POTENTIAL_END_POINT), any());
         assertEquals(97900, imbalanceService.currentImbalance.getStartPrice());
         assertEquals(100100, imbalanceService.currentImbalance.getEndPrice());
         assertEquals(0L, imbalanceService.currentImbalance.getStartTime());
@@ -109,9 +109,9 @@ class ImbalanceServiceTest {
             i++;
         }
 
-        verify(mockListener, times(1)).notifyImbalanceStateUpdate(eq(20000L), eq(ImbalanceService.State.PROGRESS), any());
-        verify(mockListener, times(1)).notifyImbalanceStateUpdate(eq(23000L), eq(ImbalanceService.State.POTENTIAL_END_POINT), any());
-        verify(mockListener, times(0)).notifyImbalanceStateUpdate(anyLong(), eq(ImbalanceService.State.COMPLETED), any());
+        verify(mockCallback, times(1)).notifyImbalanceStateUpdate(eq(20000L), eq(ImbalanceService.State.PROGRESS), any());
+        verify(mockCallback, times(1)).notifyImbalanceStateUpdate(eq(23000L), eq(ImbalanceService.State.POTENTIAL_END_POINT), any());
+        verify(mockCallback, times(0)).notifyImbalanceStateUpdate(anyLong(), eq(ImbalanceService.State.COMPLETED), any());
 
         assertEquals(ImbalanceService.State.COMPLETED, imbalanceService.currentState);
         assertEquals(97900, imbalanceService.currentImbalance.getStartPrice());
@@ -122,7 +122,7 @@ class ImbalanceServiceTest {
     }
 
     @Test
-    void testSubscribeUnsubscribeListeners() {
+    void testSetCallback() {
         imbalanceService.notifyVolatilityUpdate(0.05, 100000.);
         MarketEntry lastEntry = null;
         long lastTime = 0L;
@@ -131,12 +131,7 @@ class ImbalanceServiceTest {
             lastTime = i * 1000;
             imbalanceService.notifyNewMarketEntry(lastTime, lastEntry);
         }
-        verify(mockListener, times(1)).notifyImbalanceStateUpdate(anyLong(), eq(ImbalanceService.State.PROGRESS), any());
-        imbalanceService.unsubscribe(mockListener);
-        for (int i = 1; i < 10; i++) {
-            imbalanceService.notifyNewMarketEntry(lastTime + i * 1000L, lastEntry);
-        }
-        verify(mockListener, never()).notifyImbalanceStateUpdate(anyLong(), eq(ImbalanceService.State.POTENTIAL_END_POINT), any());
+        verify(mockCallback, times(1)).notifyImbalanceStateUpdate(anyLong(), eq(ImbalanceService.State.PROGRESS), any());
     }
 
     @Test
@@ -149,7 +144,7 @@ class ImbalanceServiceTest {
             lastTime = i * 1000;
             imbalanceService.notifyNewMarketEntry(lastTime, lastEntry);
         }
-        verify(mockListener, times(0)).notifyImbalanceStateUpdate(anyLong(), any(), any());
+        verify(mockCallback, times(0)).notifyImbalanceStateUpdate(anyLong(), any(), any());
         assertNull(imbalanceService.currentImbalance);
     }
 }

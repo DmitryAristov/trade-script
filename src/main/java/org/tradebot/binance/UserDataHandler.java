@@ -1,40 +1,61 @@
 package org.tradebot.binance;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
-import org.tradebot.listener.UserDataListener;
+import org.tradebot.domain.Position;
+import org.tradebot.listener.UserDataCallback;
+import org.tradebot.service.TradingBot;
 import org.tradebot.util.Log;
 
-import java.util.ArrayList;
-import java.util.List;
-
 public class UserDataHandler {
-    protected final List<UserDataListener> listeners = new ArrayList<>();
+    protected UserDataCallback callback;
 
     public void onMessage(String eventType, JSONObject message) {
-        Log.debug("user data stream message: " + message.toString());
+        Log.debug("user data stream message :: " + message.toString());
         if ("ORDER_TRADE_UPDATE".equals(eventType)) {
             JSONObject orderJson = message.getJSONObject("o");
             String status = orderJson.getString("X");
             String clientId = orderJson.getString("c");
 
-            listeners.forEach(listener -> listener.notifyOrderUpdate(clientId, status));
+            if (callback != null)
+                callback.notifyOrderUpdate(clientId, status);
 
+        } else if ("ACCOUNT_UPDATE".equals(eventType)) {
+            JSONObject accountUpdate = message.getJSONObject("a");
+            if ("ORDER".equals(accountUpdate.getString("m"))) {
+                JSONArray positionUpdates = accountUpdate.getJSONArray("P");
+                for (int i = 0; i < positionUpdates.length(); i++) {
+                    JSONObject positionUpdate = positionUpdates.getJSONObject(i);
+                    if (!validPositionUpdate(positionUpdate))
+                        continue;
+
+                    Position position = new Position();
+                    position.setPositionAmt(Double.parseDouble(positionUpdate.getString("pa")));
+                    position.setEntryPrice(Double.parseDouble(positionUpdate.getString("ep")));
+                    if (position.getEntryPrice() == 0 || position.getPositionAmt() == 0)
+                        position = null;
+
+                    if (callback != null)
+                        callback.notifyPositionUpdate(position);
+                    break;
+                }
+            }
         }
     }
 
-    public void subscribe(UserDataListener listener) {
-        if (!listeners.contains(listener)) {
-            listeners.add(listener);
-            Log.info(String.format("listener added %s", listener.getClass().getName()));
-        }
+    private boolean validPositionUpdate(JSONObject positionUpdate) {
+        return positionUpdate.has("ps") &&
+                "BOTH".equals(positionUpdate.getString("ps")) &&
+                positionUpdate.has("s") &&
+                TradingBot.getInstance().symbol.toUpperCase().equals(positionUpdate.getString("s"));
     }
 
-    public void unsubscribe(UserDataListener listener) {
-        listeners.remove(listener);
-        Log.info(String.format("listener removed %s", listener.getClass().getName()));
+    public void setCallback(UserDataCallback callback) {
+        this.callback = callback;
+        Log.info(String.format("callback added %s", callback.getClass().getName()));
     }
 
     public void logAll() {
-        Log.debug(String.format("listeners: %s", listeners));
+        Log.debug(String.format("callback :: %s", callback));
     }
 }

@@ -1,6 +1,6 @@
 package org.tradebot.listener;
 
-public interface WebSocketListener {
+public interface WebSocketCallback {
 
     void notifyWebsocketStateChanged(boolean ready);
 }

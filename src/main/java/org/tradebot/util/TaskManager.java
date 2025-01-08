@@ -9,38 +9,51 @@ import java.util.concurrent.TimeUnit;
 public class TaskManager {
 
     public enum Type {
-        ONCE,
+        DELAYED,
         PERIOD
     }
 
     protected final Map<String, ScheduledExecutorService> executors = new HashMap<>();
 
     public void create(String taskId, Runnable command, Type type, long initialDelay, long period, TimeUnit timeUnit) {
-        if (!executors.containsKey(taskId)) {
-            if (executors.get(taskId) == null || executors.get(taskId).isShutdown()) {
-                ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
-                executors.put(taskId, executor);
-            }
-        } else {
-            ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
-            executors.replace(taskId, executor);
+        if (executors.containsKey(taskId) &&
+                executors.get(taskId) != null &&
+                !executors.get(taskId).isShutdown()
+        ) {
+            executors.get(taskId).shutdownNow();
+            executors.remove(taskId);
         }
+
+        ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
+        executors.put(taskId, executor);
 
         switch (type) {
-            case PERIOD -> executors.get(taskId).scheduleAtFixedRate(command, initialDelay, period, timeUnit);
-            case ONCE -> executors.get(taskId).schedule(command, initialDelay, timeUnit);
+            case PERIOD -> {
+                executors.get(taskId).scheduleAtFixedRate(command, initialDelay, period, timeUnit);
+                Log.info(String.format("task '%s' will run every %d (ms) after :: ", taskId,
+                                timeUnit.toMillis(period)), System.currentTimeMillis() + timeUnit.toMillis(initialDelay));
+            }
+            case DELAYED -> {
+                executors.get(taskId).schedule(() -> {
+                    Log.info(String.format("task '%s' started", taskId));
+                    command.run();
+                    Log.info(String.format("task '%s' finished", taskId));
+                    executors.get(taskId).shutdownNow();
+                    executors.remove(taskId);
+                    Log.info(String.format("task '%s' terminated and removed", taskId));
+                }, initialDelay, timeUnit);
+                Log.info(String.format("task '%s' will run ", taskId), System.currentTimeMillis() + timeUnit.toMillis(initialDelay));
+            }
         }
-
-        Log.info(String.format("task '%s' scheduled", taskId));
     }
 
     public void stop(String taskId) {
-        if (executors.containsKey(taskId)) {
-            if (executors.get(taskId) != null && !executors.get(taskId).isShutdown()) {
-                executors.get(taskId).shutdownNow();
-                executors.remove(taskId);
-                Log.info(String.format("task '%s' stopped", taskId));
-            }
+        if (executors.containsKey(taskId) &&
+                executors.get(taskId) != null &&
+                !executors.get(taskId).isShutdown()) {
+            executors.get(taskId).shutdownNow();
+            executors.remove(taskId);
+            Log.info(String.format("task '%s' stopped", taskId));
         }
     }
 
@@ -56,8 +69,15 @@ public class TaskManager {
 
     public void logAll() {
         executors.forEach((id, executor) -> {
-            Log.debug(String.format("executor %s isShutdown: %s", id, executor.isShutdown()));
-            Log.debug(String.format("executor %s isTerminated: %s", id, executor.isTerminated()));
+            Log.debug(String.format("""
+                            '%s' ::
+                               isShutdown :: %s
+                               isTerminated :: %s
+                            """,
+                    id,
+                    executor.isShutdown(),
+                    executor.isTerminated()
+            ));
         });
     }
 }

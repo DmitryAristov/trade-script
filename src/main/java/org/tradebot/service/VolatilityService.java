@@ -2,7 +2,7 @@ package org.tradebot.service;
 
 import org.tradebot.binance.RestAPIService;
 import org.tradebot.domain.MarketEntry;
-import org.tradebot.listener.VolatilityListener;
+import org.tradebot.listener.VolatilityCallback;
 import org.tradebot.util.Log;
 import org.tradebot.util.TaskManager;
 
@@ -18,7 +18,7 @@ public class VolatilityService {
     private static final int AVERAGE_PRICE_CALCULATE_PAST_TIME = 1;
 
     private final RestAPIService apiService;
-    private final List<VolatilityListener> listeners = new ArrayList<>();
+    private VolatilityCallback callback;
     private final String symbol;
 
     public VolatilityService(String symbol, RestAPIService apiService, TaskManager taskManager) {
@@ -39,8 +39,9 @@ public class VolatilityService {
     private void updateVolatility() {
         double volatility = calculateVolatility();
         double average = calculateAverage();
-        Log.info(String.format("volatility=%.2f, average=%.2f", volatility, average));
-        listeners.forEach(listener -> listener.notifyVolatilityUpdate(volatility, average));
+        Log.info(String.format("volatility :: %.2f, average :: %.2f", volatility, average));
+        if (callback != null)
+            callback.notifyVolatilityUpdate(volatility, average);
     }
 
     private double calculateVolatility() {
@@ -75,20 +76,18 @@ public class VolatilityService {
         return sum / marketData.size();
     }
 
-    public void subscribe(VolatilityListener listener) {
-        if (!listeners.contains(listener)) {
-            listeners.add(listener);
-            Log.info(String.format("listener added %s", listener.getClass().getName()));
-        }
-    }
-
-    public void unsubscribe(VolatilityListener listener) {
-        listeners.remove(listener);
-        Log.info(String.format("listener removed %s", listener.getClass().getName()));
+    public void setCallback(VolatilityCallback callback) {
+        this.callback = callback;
+        Log.info(String.format("callback added %s", callback.getClass().getName()));
     }
 
     public void logAll() {
-        Log.debug(String.format("symbol: %s", symbol));
-        Log.debug(String.format("listeners: %s", listeners));
+        Log.debug(String.format("""
+                        symbol: %s
+                        callback: %s
+                        """,
+                symbol,
+                callback
+        ));
     }
 }

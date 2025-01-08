@@ -3,15 +3,16 @@ package org.tradebot.binance;
 import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.handshake.ServerHandshake;
 import org.json.JSONObject;
-import org.tradebot.listener.WebSocketListener;
+import org.tradebot.listener.WebSocketCallback;
 import org.tradebot.util.Log;
 import org.tradebot.util.TaskManager;
 
 import java.net.URI;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Random;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import static org.tradebot.service.ImbalanceService.fakeOpenTime;
 
 public class WebSocketService extends WebSocketClient {
 
@@ -21,10 +22,10 @@ public class WebSocketService extends WebSocketClient {
     private final RestAPIService apiService;
     private final TaskManager taskManager;
     private final String symbol;
-    private final List<WebSocketListener> listeners = new ArrayList<>();
+    private WebSocketCallback callback;
 
     private String listenKey = "";
-    private final AtomicBoolean isReady = new AtomicBoolean(false);
+    protected final AtomicBoolean isReady = new AtomicBoolean(false);
 
     public WebSocketService(String symbol,
                             TradeHandler tradeHandler,
@@ -47,13 +48,13 @@ public class WebSocketService extends WebSocketClient {
     private void setupTasks() {
         taskManager.create("websocket_ping", () -> {
             if (isReady()) {
-                Log.info("websocket ping");
                 this.sendPing();
             }
         }, TaskManager.Type.PERIOD, 5, 5, TimeUnit.MINUTES);
 
         taskManager.create("websocket_reconnect", this::reconnectWebSocket, TaskManager.Type.PERIOD,
                 24 * 60 - 5, 24 * 60 - 5, TimeUnit.MINUTES);
+        taskManager.create("fake_disconnect", this::fakeDisconnect, TaskManager.Type.PERIOD, 25, 25, TimeUnit.MILLISECONDS);
     }
 
     @Override
@@ -69,6 +70,10 @@ public class WebSocketService extends WebSocketClient {
     @Override
     public void onMessage(String msg) {
         JSONObject message = new JSONObject(msg);
+        if (!isReady()) {
+            return;
+        }
+
         if (message.has("e")) {
             switch (message.getString("e")) {
                 case "trade" -> tradeHandler.onMessage(message);
@@ -79,49 +84,45 @@ public class WebSocketService extends WebSocketClient {
     }
 
     @Override
-    public void onCloseInitiated(int code, String reason) {
-        Log.info("Websocket on close initiated called");
-        setReady(false);
-        super.onCloseInitiated(code, reason);
-    }
-
-    @Override
     public void onClose(int code, String reason, boolean remote) {
-        setReady(false);
-        Log.info(String.format("WebSocket closed: %d, %s", code, reason));
+        Log.info(String.format("websocket closed :: %d, %s", code, reason));
     }
 
     @Override
     public void onError(Exception e) {
-        setReady(false);
         Log.warn(e);
-        reconnectWebSocket();
     }
 
     protected void reconnectWebSocket() {
-        Log.info("reconnecting WebSocket...");
+        Log.info("reconnecting websocket...");
         unsubscribeFromStreams();
-        reconnect();
+        try { reconnectBlocking(); } catch (InterruptedException e) { Log.warn(e); }
     }
 
-
     public void stop() {
-        Log.info("stopping WebSocket service...");
-        setReady(false);
+        if (!isReady()) {
+            Log.warn("trying to stop already stopped service");
+            return;
+        }
+        Log.info("stopping websocket...");
         unsubscribeFromStreams();
         close();
+        Log.info("stopped");
     }
 
     private void unsubscribeFromStreams() {
-        send(String.format("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"%s@trade\"], \"id\": 1}", symbol.toLowerCase()));
-        send(String.format("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"%s@depth@100ms\"], \"id\": 2}", symbol.toLowerCase()));
-        send(String.format("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"%s\"], \"id\": 3}", listenKey));
+        try {
+            setReady(false);
+            send(String.format("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"%s@trade\"], \"id\": 1}", symbol.toLowerCase()));
+            send(String.format("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"%s@depth@100ms\"], \"id\": 2}", symbol.toLowerCase()));
+            send(String.format("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"%s\"], \"id\": 3}", listenKey));
 
-        taskManager.stop("user_data_stream_ping");
-        apiService.removeUserStreamKey();
-        Log.info("User data stream stopped");
-
-        orderBookHandler.stop();
+            taskManager.stop("user_data_stream_ping");
+            apiService.removeUserStreamKey();
+            Log.info("user data stream stopped");
+        } catch (Exception e) {
+            Log.warn(e);
+        }
     }
 
     public void connectUserDataStream() {
@@ -129,7 +130,6 @@ public class WebSocketService extends WebSocketClient {
         send(String.format("{\"method\": \"SUBSCRIBE\", \"params\": [\"%s\"], \"id\": 3}", listenKey));
 
         taskManager.create("user_data_stream_ping", () -> {
-            Log.info("User data stream keep alive");
             if (isReady()) {
                 apiService.keepAliveUserStreamKey();
             }
@@ -141,26 +141,54 @@ public class WebSocketService extends WebSocketClient {
     }
 
     private void setReady(boolean ready) {
+        if (isReady.get() == ready)
+            return;
         isReady.set(ready);
-        listeners.forEach(listener -> listener.notifyWebsocketStateChanged(ready));
+        Log.info("websocket ready state changed :: " + ready);
+        if (callback != null)
+            callback.notifyWebsocketStateChanged(ready);
     }
 
-    public void subscribe(WebSocketListener listener) {
-        if (!listeners.contains(listener)) {
-            listeners.add(listener);
-            Log.info(String.format("listener added %s", listener.getClass().getName()));
-        }
-    }
-
-    public void unsubscribe(WebSocketListener listener) {
-        listeners.remove(listener);
-        Log.info(String.format("listener removed %s", listener.getClass().getName()));
+    public void setCallback(WebSocketCallback callback) {
+        this.callback = callback;
+        Log.info(String.format("callback added %s", callback.getClass().getName()));
     }
 
     public void logAll() {
-        Log.debug(String.format("symbol: %s", symbol));
-        Log.debug(String.format("listenKey: %s", listenKey));
-        Log.debug(String.format("this.isOpen(): %s", this.isOpen()));
-        Log.debug(String.format("this.isReady(): %s", this.isReady()));
+        Log.debug(String.format("""
+                        symbol: %s
+                        listenKey: %s
+                        this.isOpen(): %s
+                        this.isReady(): %s
+                        """,
+                symbol,
+                listenKey,
+                this.isOpen(),
+                this.isReady()
+        ));
+    }
+
+    public static int reconnectsCount = 0;
+    private void fakeDisconnect() {
+        long openTime = System.currentTimeMillis() - fakeOpenTime;
+        if (openTime > -20L + reconnectsCount * 10L && openTime < 10L + reconnectsCount * 10L) {
+            if (!isReady()) {
+                return;
+            }
+            this.setReady(false);
+            Log.info("<<<<FAKE>>>> fake disconnect for duration :: " + openTime);
+            Log.info("<<<<FAKE>>>> current positions count :: " + reconnectsCount);
+            Log.info("<<<<FAKE>>>> fake open time :: ", fakeOpenTime);
+            long rerunTaskDelay = new Random().nextLong(1_000L, 30_000L);
+            Log.info("<<<<FAKE>>>> reconnect after :: " + rerunTaskDelay);
+            taskManager.create("reset_ws_ready_state", () -> {
+                Log.info("<<<<FAKE>>>> reconnect is running..");
+                this.setReady(true);
+                reconnectsCount++;
+                Log.info("<<<<FAKE>>>> reconnects count increased  :: " + reconnectsCount);
+                fakeOpenTime = System.currentTimeMillis() + 120_000L;
+                Log.info("<<<<FAKE>>>> next position open time :: ", fakeOpenTime);
+            }, TaskManager.Type.DELAYED, rerunTaskDelay, -1, TimeUnit.MILLISECONDS);
+        }
     }
 }

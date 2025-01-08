@@ -1,6 +1,6 @@
 package org.tradebot.listener;
 
-public interface VolatilityListener {
+public interface VolatilityCallback {
 
     void notifyVolatilityUpdate(double volatility, double average);
 }

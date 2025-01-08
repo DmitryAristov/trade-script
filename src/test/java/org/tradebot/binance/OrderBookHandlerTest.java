@@ -8,7 +8,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.tradebot.domain.OrderBook;
-import org.tradebot.listener.OrderBookListener;
+import org.tradebot.listener.OrderBookCallback;
 import org.tradebot.util.TaskManager;
 
 import java.util.Map;
@@ -23,7 +23,7 @@ class OrderBookHandlerTest {
     private RestAPIService apiService;
 
     @Mock
-    private OrderBookListener listener;
+    private OrderBookCallback callback;
 
     @Mock
     private TaskManager taskManager;
@@ -38,12 +38,9 @@ class OrderBookHandlerTest {
     }
 
     @Test
-    void testSubscribeAndUnsubscribe() {
-        orderBookHandler.subscribe(listener);
-        assertTrue(orderBookHandler.listeners.contains(listener));
-
-        orderBookHandler.unsubscribe(listener);
-        assertFalse(orderBookHandler.listeners.contains(listener));
+    void testSetCallback() {
+        orderBookHandler.setCallback(callback);
+        assertEquals(orderBookHandler.callback, callback);
     }
 
     @Test

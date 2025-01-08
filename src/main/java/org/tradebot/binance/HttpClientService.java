@@ -25,51 +25,65 @@ public class HttpClientService {
         return sendRequest(endpoint, method, params, false);
     }
 
+    private static final int SEND_REQUEST_RETRY_ATTEMPTS = 2;
     public String sendRequest(String endpoint, String method, Map<String, String> params, boolean useBody) {
-        Log.debug(String.format("send %s request to %s with params %s", method, endpoint, params.toString()));
-        try {
-            params.put("timestamp", String.valueOf(System.currentTimeMillis()));
-            String signature = generateSignature(params);
-            params.put("signature", signature);
+        Exception e = new RuntimeException();
+        int retries = SEND_REQUEST_RETRY_ATTEMPTS;
+        while (retries-- > 0) {
+            try {
+                long start = System.nanoTime();
+                Map<String, String> attemptParams = new HashMap<>(params);
+                Log.debug(String.format("send %s request to %s with params %s", method, endpoint, attemptParams));
+                attemptParams.put("timestamp", String.valueOf(System.currentTimeMillis()));
+                String signature = generateSignature(attemptParams);
+                attemptParams.put("signature", signature);
 
-            String query = getParamsString(params);
-            URL url = useBody
-                    ? new URI(BASE_URL + endpoint).toURL()
-                    : new URI(BASE_URL + endpoint + "?" + query).toURL();
+                String query = getParamsString(attemptParams);
+                URL url = useBody
+                        ? new URI(BASE_URL + endpoint).toURL()
+                        : new URI(BASE_URL + endpoint + "?" + query).toURL();
 
-            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-            connection.setRequestMethod(method);
-            connection.setRequestProperty("X-MBX-APIKEY", API_KEY);
-            connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+                connection.setRequestMethod(method);
+                connection.setRequestProperty("X-MBX-APIKEY", API_KEY);
+                connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
 
-            if (useBody && (method.equals("POST") || method.equals("PUT") || method.equals("DELETE"))) {
-                connection.setDoOutput(true);
-                try (OutputStream os = connection.getOutputStream()) {
-                    byte[] input = query.getBytes(StandardCharsets.UTF_8);
-                    os.write(input, 0, input.length);
+                if (useBody && (method.equals("POST") || method.equals("PUT") || method.equals("DELETE"))) {
+                    connection.setDoOutput(true);
+                    try (OutputStream os = connection.getOutputStream()) {
+                        byte[] input = query.getBytes(StandardCharsets.UTF_8);
+                        os.write(input, 0, input.length);
+                    }
                 }
+
+                Map<String, List<String>> headers = connection.getHeaderFields();
+                Log.debug(String.format("headers %s", headers.toString()));
+
+                int responseCode = connection.getResponseCode();
+                if (responseCode >= 200 && responseCode < 300) {
+                    try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
+                        String response = reader.lines().collect(Collectors.joining());
+                        long finish = System.nanoTime();
+                        Log.debug(String.format("TIME TOOK :: %.0f (ms)", (finish - start) / 1000000.));
+                        Log.debug(String.format("response code %d, body %s", responseCode, response));
+                        return response;
+                    }
+                } else {
+                    try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getErrorStream()))) {
+                        String errorResponse = reader.lines().collect(Collectors.joining());
+                        long finish = System.nanoTime();
+                        Log.debug(String.format("TIME TOOK :: %.0f (ms)", (finish - start) / 1000000.));
+                        Log.warn(String.format("response code %d, body %s", responseCode, errorResponse));
+                        throw new RuntimeException(errorResponse);
+                    }
+                }
+            } catch (Exception exception) {
+                Log.warn(exception);
+                Log.warn("retry request attempt :: " + (SEND_REQUEST_RETRY_ATTEMPTS - retries));
+                e = exception;
             }
-
-            Map<String, List<String>> headers = connection.getHeaderFields();
-            Log.debug(String.format("headers %s", headers.toString()));
-
-            int responseCode = connection.getResponseCode();
-            if (responseCode >= 200 && responseCode < 300) {
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
-
-                    String response = reader.lines().collect(Collectors.joining());
-                    Log.debug(String.format("response code %d, body %s", responseCode, response));
-                    return response;
-                }
-            } else {
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getErrorStream()))) {
-                    String errorResponse = reader.lines().collect(Collectors.joining());
-                    throw Log.error(String.format("http error %d, message %s", responseCode, errorResponse));
-                }
-            }
-        } catch (Exception e) {
-            throw Log.error(e);
         }
+        throw Log.error(e);
     }
 
     protected String generateSignature(Map<String, String> params) throws Exception {
@@ -99,35 +113,44 @@ public class HttpClientService {
     }
 
     public HttpResponse sendPublicRequest(String request, boolean allowErrorResponse) {
-        try {
-            URL url = new URI(request).toURL();
-            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-            connection.setRequestMethod("GET");
+        Exception e = new RuntimeException();
+        int retries = SEND_REQUEST_RETRY_ATTEMPTS;
+        while (retries-- > 0) {
+            try {
+                long start = System.nanoTime();
+                URL url = new URI(request).toURL();
+                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+                connection.setRequestMethod("GET");
 
-            Map<String, List<String>> headers = connection.getHeaderFields();
-            Log.debug(String.format("headers %s", headers.toString()));
+                Map<String, List<String>> headers = connection.getHeaderFields();
+                Log.debug(String.format("headers %s", headers.toString()));
 
-            int responseCode = connection.getResponseCode();
-            if (responseCode >= 200 && responseCode < 300) {
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
-                    String response = reader.lines().collect(Collectors.joining());
-                    HttpResponse httpResponse = new HttpResponse(responseCode, response);
-                    Log.debug(httpResponse.toString());
-                    return httpResponse;
-                }
-            } else {
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getErrorStream()))) {
-                    String errorResponse = reader.lines().collect(Collectors.joining());
-                    if (allowErrorResponse) {
-                        return new HttpResponse(responseCode, errorResponse);
-                    } else {
-                        throw Log.error(new HttpResponse(responseCode, errorResponse).toString());
+                int responseCode = connection.getResponseCode();
+                if (responseCode >= 200 && responseCode < 300) {
+                    try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
+                        String response = reader.lines().collect(Collectors.joining());
+                        HttpResponse httpResponse = new HttpResponse(responseCode, response);
+                        Log.debug(String.format("response code %d, body %s", responseCode, response));
+                        long finish = System.nanoTime();
+                        Log.debug(String.format("TIME TOOK :: %.0f (ms)", (finish - start) / 1000000.));
+                        return httpResponse;
+                    }
+                } else {
+                    try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getErrorStream()))) {
+                        String errorResponse = reader.lines().collect(Collectors.joining());
+                        if (allowErrorResponse) {
+                            return new HttpResponse(responseCode, errorResponse);
+                        } else {
+                            throw new RuntimeException(errorResponse);
+                        }
                     }
                 }
+            } catch (Exception exception) {
+                Log.warn(exception);
+                Log.warn("retry request attempt :: " + (SEND_REQUEST_RETRY_ATTEMPTS - retries));
+                e = exception;
             }
-        } catch (Exception e) {
-            throw Log.error(e);
         }
+        throw Log.error(e);
     }
-
 }

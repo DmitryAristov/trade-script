@@ -25,6 +25,6 @@ public class TimeFormatter {
     }
 
     public static String now() {
-        return LocalDateTime.now().format(DATETIME_FORMATTER);
+        return LocalDateTime.now(ZoneOffset.UTC).format(DATETIME_FORMATTER);
     }
 }

@@ -40,9 +40,10 @@ public class Position {
     @Override
     public String toString() {
         return String.format("""
-                        Order
+                        Position
                            entryPrice :: %s
-                           positionAmt :: %s""",
+                           positionAmt :: %s
+                        """,
                 entryPrice,
                 positionAmt);
     }

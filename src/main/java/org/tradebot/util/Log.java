@@ -1,6 +1,5 @@
 package org.tradebot.util;
 
-import org.tradebot.service.TradingBot;
 import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -46,17 +45,11 @@ public class Log {
                                 .map(StackTraceElement::toString)
                                 .reduce("", (s1, s2) -> s1 + "\n    at " + s2),
                 Level.ERROR);
-        TradingBot.logAll();
-        if (TradingBot.getInstance() != null)
-            TradingBot.getInstance().stop();
         return new RuntimeException(exception);
     }
 
     public static RuntimeException error(String message) {
         log("error got: " + message, Level.ERROR);
-        TradingBot.logAll();
-        if (TradingBot.getInstance() != null)
-            TradingBot.getInstance().stop();
         return new RuntimeException(message);
     }
 
@@ -90,7 +83,7 @@ public class Log {
         String logEntry = level + ((level == Level.INFO) ? " " : "") + " [" + TimeFormatter.now() + "] " + classAndMethodName + message;
 
         if (mills != -1) {
-            logEntry += " on " + TimeFormatter.format(mills);
+            logEntry += " on " + TimeFormatter.format(mills) + " (" + mills + ")";
         }
 
         writeLogFile(logEntry, DEBUG_LOGS_PATH);
@@ -105,7 +98,7 @@ public class Log {
             writer.write(logEntry);
             writer.newLine();
         } catch (IOException e) {
-            throw new RuntimeException(e.getMessage());
+            throw new RuntimeException(e);
         }
     }
 
