@@ -1,7 +1,5 @@
 package org.tradebot.domain;
 
-import org.tradebot.util.Log;
-
 public class Position {
     public enum Type {
         LONG,
@@ -33,7 +31,7 @@ public class Position {
         } else if (positionAmt < 0) {
             return Type.SHORT;
         } else {
-            throw Log.error("zero position amount");
+            throw new RuntimeException("zero position amount");
         }
     }
 
@@ -44,7 +42,6 @@ public class Position {
                            entryPrice :: %s
                            positionAmt :: %s
                         """,
-                entryPrice,
-                positionAmt);
+                entryPrice, positionAmt);
     }
 }

@@ -3,7 +3,6 @@ package org.tradebot.binance;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.*;
-import org.tradebot.service.TradingBot;
 import org.tradebot.domain.*;
 
 import java.io.*;
@@ -12,22 +11,23 @@ import java.util.TreeMap;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
-import static org.tradebot.binance.RestAPIService.BASE_ASSET;
-import static org.tradebot.binance.RestAPIService.RISK_LEVEL;
+import static org.tradebot.util.JsonParser.BASE_ASSET;
+import static org.tradebot.util.JsonParser.RISK_LEVEL;
 
+//TODO
 @SuppressWarnings("unchecked")
-class RestAPIServiceTest {
-
-    @Mock
-    private HttpClientService httpClient;
+class APIServiceTest {
 
     @InjectMocks
-    private RestAPIService restAPIService;
+    private APIService apiService;
+
+    @Mock
+    private HttpClient httpClient;
 
     @BeforeEach
     void setUp() {
-        TradingBot.precision = new Precision(1, 2);
         MockitoAnnotations.openMocks(this);
+        apiService = spy(new APIService(httpClient));
     }
 
     @Test
@@ -47,9 +47,9 @@ class RestAPIServiceTest {
         order.setStatus(Order.Status.NEW);
 
         String orderJsonStr = readFile("order.json");
-        when(httpClient.sendRequest(anyString(), anyString(), anyMap(), anyBoolean())).thenReturn(orderJsonStr);
+        when(httpClient.sendRequest(anyString(), anyString(), anyMap(), anyBoolean())).thenReturn(HTTPResponse.success(200,orderJsonStr));
 
-        Order result = restAPIService.placeOrder(order);
+        Order result = apiService.placeOrder(order).getSuccessResponse();
 
         assertEquals(123L, result.getId());
         assertEquals("BTCUSDT", result.getSymbol());
@@ -76,9 +76,9 @@ class RestAPIServiceTest {
         order.setTimeInForce(Order.TimeInForce.GTC);
 
         String orderJsonStr = readFile("order.json");
-        when(httpClient.sendRequest(anyString(), anyString(), anyMap(), anyBoolean())).thenReturn(orderJsonStr);
+        when(httpClient.sendRequest(anyString(), anyString(), anyMap(), anyBoolean())).thenReturn(HTTPResponse.success(200,orderJsonStr));
 
-        Order result = restAPIService.placeOrder(order);
+        Order result = apiService.placeOrder(order).getSuccessResponse();
 
         assertEquals(123L, result.getId());
         assertEquals("BTCUSDT", result.getSymbol());
@@ -91,8 +91,8 @@ class RestAPIServiceTest {
     void testSetLeverage() {
         int leverage = 20;
         ArgumentCaptor<Map<String, String>> captor = ArgumentCaptor.forClass(Map.class);
-        when(httpClient.sendRequest(anyString(), anyString(), anyMap())).thenReturn("mocked-response");
-        restAPIService.setLeverage("BTCUSDT", leverage);
+        when(httpClient.sendRequest(anyString(), anyString(), anyMap())).thenReturn(HTTPResponse.success(200,"mocked-response"));
+        apiService.setLeverage("BTCUSDT", leverage);
 
         verify(httpClient).sendRequest(eq("/fapi/v1/leverage"), eq("POST"), captor.capture());
         Map<String, String> params = captor.getValue();
@@ -102,39 +102,39 @@ class RestAPIServiceTest {
 
     @Test
     void testGetLeverage() {
-        when(httpClient.sendRequest(anyString(), anyString(), anyMap())).thenReturn("[{\"leverage\": \"10\"}]");
-        int leverage = restAPIService.getLeverage("BTCUSDT");
+        when(httpClient.sendRequest(anyString(), anyString(), anyMap())).thenReturn(HTTPResponse.success(200,"[{\"leverage\": \"10\"}]"));
+        int leverage = apiService.getLeverage("BTCUSDT").getSuccessResponse();
         assertEquals(10, leverage);
     }
 
     @Test
     void testGetLeverage_zeroLeverage() {
-        when(httpClient.sendRequest(anyString(), anyString(), anyMap())).thenReturn("[]");
-        int leverage = restAPIService.getLeverage("BTCUSDT");
-        assertEquals(-1, leverage);
+        when(httpClient.sendRequest(anyString(), anyString(), anyMap())).thenReturn(HTTPResponse.success(200,"[]"));
+        Integer leverage = apiService.getLeverage("BTCUSDT").getSuccessResponse();
+        assertNull(leverage);
     }
 
     @Test
     void testGetAccountBalance() {
         when(httpClient.sendRequest(anyString(), anyString(), anyMap()))
-                .thenReturn(String.format("[{\"asset\": \"%s\", \"availableBalance\": \"100.5\"}]", BASE_ASSET));
-        double balance = restAPIService.getAccountBalance();
+                .thenReturn(HTTPResponse.success(200,String.format("[{\"asset\": \"%s\", \"availableBalance\": \"100.5\"}]", BASE_ASSET)));
+        double balance = apiService.getAccountBalance().getSuccessResponse();
         assertEquals(100.5 * RISK_LEVEL, balance);
     }
 
     @Test
     void testGetAccountBalance_zeroBalance() {
         when(httpClient.sendRequest(anyString(), anyString(), anyMap()))
-                .thenReturn("[{\"asset\": \"BNB\", \"availableBalance\": \"100.5\"}]");
-        double balance = restAPIService.getAccountBalance();
+                .thenReturn(HTTPResponse.success(200,"[{\"asset\": \"BNB\", \"availableBalance\": \"100.5\"}]"));
+        double balance = apiService.getAccountBalance().getSuccessResponse();
         assertEquals(0, balance);
     }
 
     @Test
     void testGetAccountInfo() {
         when(httpClient.sendRequest(anyString(), anyString(), anyMap()))
-                .thenReturn("{\"canTrade\":true,\"totalWalletBalance\":\"150.75\"}");
-        AccountInfo accountInfo = restAPIService.getAccountInfo();
+                .thenReturn(HTTPResponse.success(200,"{\"canTrade\":true,\"totalWalletBalance\":\"150.75\"}"));
+        AccountInfo accountInfo = apiService.getAccountInfo().getSuccessResponse();
         assertTrue(accountInfo.canTrade());
         assertEquals(150.75, accountInfo.availableBalance());
     }
@@ -142,30 +142,30 @@ class RestAPIServiceTest {
     @Test
     void testGetUserStreamKey() {
         when(httpClient.sendRequest(anyString(), anyString(), anyMap()))
-                .thenReturn("{\"listenKey\":\"testListenKey123\"}");
-        String streamKey = restAPIService.getUserStreamKey();
+                .thenReturn(HTTPResponse.success(200,"{\"listenKey\":\"testListenKey123\"}"));
+        String streamKey = apiService.getUserStreamKey().getSuccessResponse();
         assertEquals("testListenKey123", streamKey);
     }
 
     @Test
     void testKeepAliveUserStreamKey() {
-        when(httpClient.sendRequest(anyString(), anyString(), anyMap())).thenReturn("mocked-response");
-        restAPIService.keepAliveUserStreamKey();
+        when(httpClient.sendRequest(anyString(), anyString(), anyMap())).thenReturn(HTTPResponse.success(200,"mocked-response"));
+        apiService.keepAliveUserStreamKey();
         verify(httpClient).sendRequest(eq("/fapi/v1/listenKey"), eq("PUT"), anyMap());
     }
 
     @Test
     void testRemoveUserStreamKey() {
-        when(httpClient.sendRequest(anyString(), anyString(), anyMap())).thenReturn("mocked-response");
-        restAPIService.removeUserStreamKey();
+        when(httpClient.sendRequest(anyString(), anyString(), anyMap())).thenReturn(HTTPResponse.success(200,"mocked-response"));
+        apiService.removeUserStreamKey();
         verify(httpClient).sendRequest(eq("/fapi/v1/listenKey"), eq("DELETE"), anyMap());
     }
 
     @Test
     void testGetOpenPosition() {
         when(httpClient.sendRequest(anyString(), anyString(), anyMap()))
-                .thenReturn("[{\"entryPrice\": \"100.5\", \"positionAmt\": \"10.0\"}]");
-        Position position = restAPIService.getOpenPosition("BTCUSDT");
+                .thenReturn(HTTPResponse.success(200,"[{\"entryPrice\": \"100.5\", \"positionAmt\": \"10.0\"}]"));
+        Position position = apiService.getOpenPosition("BTCUSDT").getSuccessResponse();
         assertNotNull(position);
         assertEquals(100.5, position.getEntryPrice());
         assertEquals(10.0, position.getPositionAmt());
@@ -173,25 +173,25 @@ class RestAPIServiceTest {
 
     @Test
     void testGetOpenPosition_emptyList() {
-        when(httpClient.sendRequest(anyString(), anyString(), anyMap())).thenReturn("[]");
-        Position position = restAPIService.getOpenPosition("BTCUSDT");
+        when(httpClient.sendRequest(anyString(), anyString(), anyMap())).thenReturn(HTTPResponse.success(200,"[]"));
+        Position position = apiService.getOpenPosition("BTCUSDT").getSuccessResponse();
         assertNull(position);
     }
 
     @Test
     void testGetOpenPosition_emptyPosition() {
         when(httpClient.sendRequest(anyString(), anyString(), anyMap()))
-                .thenReturn("[{\"entryPrice\": \"0\", \"positionAmt\": \"0\"}]");
-        Position position = restAPIService.getOpenPosition("BTCUSDT");
+                .thenReturn(HTTPResponse.success(200,"[{\"entryPrice\": \"0\", \"positionAmt\": \"0\"}]"));
+        Position position = apiService.getOpenPosition("BTCUSDT").getSuccessResponse();
         assertNull(position);
     }
 
     @Test
     void testGetMarketDataPublicAPI() {
         when(httpClient.sendPublicRequest(anyString()))
-                .thenReturn(new HttpResponse(200,
+                .thenReturn(HTTPResponse.success(200,
                         "[[6288335309618,\"\",\"93000\",\"92000\",\"\",\"30\"]]"));
-        TreeMap<Long, MarketEntry> marketData = restAPIService.getMarketDataPublicAPI("BTCUSDT", "1m", 1);
+        TreeMap<Long, MarketEntry> marketData = apiService.getMarketDataPublicAPI("BTCUSDT", "1m", 1).getSuccessResponse();
         assertEquals(1, marketData.size());
         MarketEntry entry = marketData.firstEntry().getValue();
         assertEquals(93000, entry.high());
@@ -201,11 +201,11 @@ class RestAPIServiceTest {
     }
 
     @Test
-    void testGetOrderBookPublicAPI() {
-        when(httpClient.sendPublicRequest(anyString(), anyBoolean())).thenReturn(new HttpResponse(200,
+    void testParseOrderBookPublicAPI() {
+        when(httpClient.sendPublicRequest(anyString())).thenReturn(HTTPResponse.success(200,
                 "{\"lastUpdateId\": 6288335309618,\"bids\":[[\"90000\",\"4.2\"]],\"asks\":[[\"91000\",\"3.5\"]]}"));
 
-        OrderBook orderBook = restAPIService.getOrderBookPublicAPI("BTCUSDT");
+        OrderBook orderBook = apiService.getOrderBookPublicAPI("BTCUSDT").getSuccessResponse();
 
         assertEquals(6288335309618L, orderBook.lastUpdateId());
         assertEquals(1, orderBook.asks().size());

@@ -6,7 +6,7 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 
 public class TimeFormatter {
-    public static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    public static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
 
     public static String format(long mills) {
         return LocalDateTime.ofInstant(Instant.ofEpochMilli(mills), ZoneOffset.UTC).format(DATETIME_FORMATTER);

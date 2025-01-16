@@ -8,7 +8,7 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.tradebot.domain.MarketEntry;
 import org.tradebot.listener.MarketDataCallback;
-import org.tradebot.util.TaskManager;
+import org.tradebot.service.TaskManager;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;

@@ -7,10 +7,12 @@ import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.tradebot.domain.HTTPResponse;
 import org.tradebot.domain.OrderBook;
 import org.tradebot.listener.OrderBookCallback;
-import org.tradebot.util.TaskManager;
+import org.tradebot.service.TaskManager;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -20,7 +22,7 @@ import static org.mockito.Mockito.*;
 class OrderBookHandlerTest {
 
     @Mock
-    private RestAPIService apiService;
+    private APIService apiService;
 
     @Mock
     private OrderBookCallback callback;
@@ -45,9 +47,12 @@ class OrderBookHandlerTest {
 
     @Test
     void testInitializeOrderBook_Failure() {
-        OrderBook mockOrderBook = new OrderBook(429L, null, null);
-        when(apiService.getOrderBookPublicAPI(anyString())).thenReturn(mockOrderBook);
-        orderBookHandler.onMessage(new JSONObject().put("u", 123456));
+        OrderBook mockOrderBook = new OrderBook(123450, new HashMap<>(), new HashMap<>());
+        when(apiService.getOrderBookPublicAPI(anyString())).thenReturn(HTTPResponse.success(200, mockOrderBook));
+        JSONObject message = new JSONObject();
+        message.put("U", 123455);
+        message.put("u", 123456);
+        orderBookHandler.onMessage(message);
         assertFalse(orderBookHandler.isOrderBookInitialized);
     }
 
@@ -59,7 +64,7 @@ class OrderBookHandlerTest {
         asks.put(3.0, 4.0);
         OrderBook mockOrderBook = new OrderBook(123456, asks, bids);
 
-        when(apiService.getOrderBookPublicAPI(anyString())).thenReturn(mockOrderBook);
+        when(apiService.getOrderBookPublicAPI(anyString())).thenReturn(HTTPResponse.success(200, mockOrderBook));
 
         JSONObject message = new JSONObject();
         message.put("U", 123455);

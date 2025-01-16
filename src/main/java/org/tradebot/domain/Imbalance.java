@@ -87,6 +87,9 @@ public class Imbalance implements Serializable {
                            startPrice :: %.2f
                            endTime :: %s (%d)
                            endPrice :: %.2f
+                           duration :: %d
+                           size :: %.2f
+                           speed :: %.2f
                            computedDuration :: %.2f
                         """,
                 TimeFormatter.format(startTime),
@@ -95,6 +98,9 @@ public class Imbalance implements Serializable {
                 TimeFormatter.format(endTime),
                 endTime,
                 endPrice,
+                duration(),
+                size(),
+                speed(),
                 computedDuration);
     }
 }

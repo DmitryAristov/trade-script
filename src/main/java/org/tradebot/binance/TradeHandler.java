@@ -3,8 +3,8 @@ package org.tradebot.binance;
 import org.json.JSONObject;
 import org.tradebot.domain.MarketEntry;
 import org.tradebot.listener.MarketDataCallback;
+import org.tradebot.service.TaskManager;
 import org.tradebot.util.Log;
-import org.tradebot.util.TaskManager;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -13,6 +13,10 @@ import java.util.concurrent.TimeUnit;
 public class TradeHandler {
 
     private static final int MAX_TRADE_QUEUE_SIZE = 100000;
+    public static final String MARKET_DATA_UPDATE_TASK_KEY = "market_data_update";
+    private final Log log = new Log("market_data_handler.log");
+
+    private final TaskManager taskManager;
     protected MarketDataCallback callback;
 
     protected Deque<JSONObject> activeQueue = new ArrayDeque<>(MAX_TRADE_QUEUE_SIZE);
@@ -20,9 +24,15 @@ public class TradeHandler {
     protected Double lastPrice = null;
 
     public TradeHandler(TaskManager taskManager) {
-        taskManager.create("market_data_update", this::updateMarketData, TaskManager.Type.PERIOD,
+        this.taskManager = taskManager;
+        log.info("TradeHandler initialized");
+    }
+
+    public void scheduleTasks() {
+        log.info("Setting up Market Data update task...");
+        this.taskManager.scheduleAtFixedRate(MARKET_DATA_UPDATE_TASK_KEY, this::updateMarketData,
                 1000 - System.currentTimeMillis() % 1000, 100, TimeUnit.MILLISECONDS);
-        Log.info("service started");
+        log.info("Market Data update task scheduled");
     }
 
     public void onMessage(JSONObject message) {
@@ -64,12 +74,12 @@ public class TradeHandler {
                 return;
             }
 //            Log.removeLines(1, Log.MARKET_DATA_LOGS_PATH);
-            Log.info("entry :: " + entry, Log.MARKET_DATA_LOGS_PATH);
+            log.debug("entry :: " + entry);
 
             if (callback != null)
                 callback.notifyNewMarketEntry(openTime, entry);
         } catch (Exception e) {
-            throw Log.error(e);
+            log.error("failed to update market data", e);
         }
     }
 
@@ -86,13 +96,19 @@ public class TradeHandler {
         return entry;
     }
 
+    public void cancelTasks() {
+        log.info("Cancelling Market Data update task...");
+        taskManager.cancel(MARKET_DATA_UPDATE_TASK_KEY);
+        log.info("Cancelling Market Data update task...");
+    }
+
     public void setCallback(MarketDataCallback callback) {
         this.callback = callback;
-        Log.info(String.format("callback added %s", callback.getClass().getName()));
+        log.info(String.format("Callback set: %s", callback.getClass().getName()));
     }
 
     public void logAll() {
-        Log.debug(String.format("""
+        log.debug(String.format("""
                         callback: %s
                         activeQueue: %s
                         processingQueue: %s

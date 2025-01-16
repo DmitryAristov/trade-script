@@ -4,8 +4,9 @@ import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.handshake.ServerHandshake;
 import org.json.JSONObject;
 import org.tradebot.listener.WebSocketCallback;
+import org.tradebot.service.TaskManager;
 import org.tradebot.util.Log;
-import org.tradebot.util.TaskManager;
+import org.tradebot.util.TimeFormatter;
 
 import java.net.URI;
 import java.util.Random;
@@ -15,23 +16,27 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static org.tradebot.service.ImbalanceService.fakeOpenTime;
 
 public class WebSocketService extends WebSocketClient {
+    public static final String USER_DATA_STREAM_PING_TASK_KEY = "user_data_stream_ping";
+    public static final String WEBSOCKET_PING_TASK_KEY = "websocket_ping";
+    public static final String WEBSOCKET_RECONNECT_TASK_KEY = "websocket_reconnect";
+    private final Log log = new Log();
 
     private final TradeHandler tradeHandler;
     private final OrderBookHandler orderBookHandler;
     private final UserDataHandler userDataHandler;
-    private final RestAPIService apiService;
+    private final APIService apiService;
     private final TaskManager taskManager;
     private final String symbol;
     private WebSocketCallback callback;
 
-    private String listenKey = "";
+    private String listenKey = null;
     protected final AtomicBoolean isReady = new AtomicBoolean(false);
 
     public WebSocketService(String symbol,
                             TradeHandler tradeHandler,
                             OrderBookHandler orderBookHandler,
                             UserDataHandler userDataHandler,
-                            RestAPIService apiService,
+                            APIService apiService,
                             TaskManager taskManager) {
         super(URI.create("wss://stream.binancefuture.com/ws"));//"wss://fstream.binance.com/ws"
         this.symbol = symbol;
@@ -40,31 +45,20 @@ public class WebSocketService extends WebSocketClient {
         this.userDataHandler = userDataHandler;
         this.apiService = apiService;
         this.taskManager = taskManager;
-
-        setupTasks();
-        Log.info("service created");
-    }
-
-    private void setupTasks() {
-        taskManager.create("websocket_ping", () -> {
-            if (isReady()) {
-                this.sendPing();
-            }
-        }, TaskManager.Type.PERIOD, 5, 5, TimeUnit.MINUTES);
-
-        taskManager.create("websocket_reconnect", this::reconnectWebSocket, TaskManager.Type.PERIOD,
-                24 * 60 - 5, 24 * 60 - 5, TimeUnit.MINUTES);
-        taskManager.create("fake_disconnect", this::fakeDisconnect, TaskManager.Type.PERIOD, 25, 25, TimeUnit.MILLISECONDS);
+        log.info("WebSocketService initialized");
     }
 
     @Override
     public void onOpen(ServerHandshake handshake) {
+        log.info("WebSocket connection opened.");
+        scheduleTasks();
+        log.info("Subscribing WebSocket trade stream...");
         send(String.format("{\"method\": \"SUBSCRIBE\", \"params\": [\"%s@trade\"], \"id\": 1}", symbol.toLowerCase()));
+        log.info("Subscribing WebSocket depth stream...");
         send(String.format("{\"method\": \"SUBSCRIBE\", \"params\": [\"%s@depth@100ms\"], \"id\": 2}", symbol.toLowerCase()));
         connectUserDataStream();
         setReady(true);
-
-        Log.info("service started");
+        log.info("WebSocket service started.");
     }
 
     @Override
@@ -75,7 +69,8 @@ public class WebSocketService extends WebSocketClient {
         }
 
         if (message.has("e")) {
-            switch (message.getString("e")) {
+            String eventType = message.getString("e");
+            switch (eventType) {
                 case "trade" -> tradeHandler.onMessage(message);
                 case "depthUpdate" -> orderBookHandler.onMessage(message);
                 default -> userDataHandler.onMessage(message.getString("e"), message);
@@ -85,55 +80,106 @@ public class WebSocketService extends WebSocketClient {
 
     @Override
     public void onClose(int code, String reason, boolean remote) {
-        Log.info(String.format("websocket closed :: %d, %s", code, reason));
+        log.warn(String.format("WebSocket closed (code: %d, reason: %s, remote: %s)", code, reason, remote));
+        if (code != 1000) {
+            log.info("Scheduling WebSocket reconnect...");
+            taskManager.scheduleAtFixedRate("websocket_reconnect", this::reconnectWebSocket,
+                    1, 24 * 60 - 5, TimeUnit.MINUTES);
+        }
     }
 
     @Override
     public void onError(Exception e) {
-        Log.warn(e);
+        log.error("WebSocket encountered an error", e);
     }
 
     protected void reconnectWebSocket() {
-        Log.info("reconnecting websocket...");
+        log.info("Reconnecting WebSocket...");
         unsubscribeFromStreams();
-        try { reconnectBlocking(); } catch (InterruptedException e) { Log.warn(e); }
-    }
-
-    public void stop() {
-        if (!isReady()) {
-            Log.warn("trying to stop already stopped service");
-            return;
+        try {
+            reconnectBlocking();
+            log.info("WebSocket reconnected successfully.");
+        } catch (InterruptedException e) {
+            log.error("Failed to reconnect WebSocket", e);
+            Thread.currentThread().interrupt();
         }
-        Log.info("stopping websocket...");
-        unsubscribeFromStreams();
-        close();
-        Log.info("stopped");
     }
 
-    private void unsubscribeFromStreams() {
+    protected void unsubscribeFromStreams() {
         try {
             setReady(false);
+            log.info("Unsubscribing from WebSocket trade stream...");
             send(String.format("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"%s@trade\"], \"id\": 1}", symbol.toLowerCase()));
+            log.info("Unsubscribing from WebSocket depth stream...");
             send(String.format("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"%s@depth@100ms\"], \"id\": 2}", symbol.toLowerCase()));
-            send(String.format("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"%s\"], \"id\": 3}", listenKey));
-
-            taskManager.stop("user_data_stream_ping");
-            apiService.removeUserStreamKey();
-            Log.info("user data stream stopped");
+            disconnectUserDataStream();
+            cancelTasks();
+            log.info("User data stream closed.");
         } catch (Exception e) {
-            Log.warn(e);
+            log.error("Failed to unsubscribe from WebSocket streams", e);
         }
     }
 
-    public void connectUserDataStream() {
-        listenKey = apiService.getUserStreamKey();
-        send(String.format("{\"method\": \"SUBSCRIBE\", \"params\": [\"%s\"], \"id\": 3}", listenKey));
+    protected void scheduleTasks() {
+        log.info("Setting up periodic tasks...");
+        taskManager.scheduleAtFixedRate(WEBSOCKET_PING_TASK_KEY, () -> {
+            log.info("Sending WebSocket ping...");
+            this.sendPing();
+        }, 5, 5, TimeUnit.MINUTES);
 
-        taskManager.create("user_data_stream_ping", () -> {
-            if (isReady()) {
+        taskManager.scheduleAtFixedRate(WEBSOCKET_RECONNECT_TASK_KEY, this::reconnectWebSocket,
+                24 * 60 - 5, 24 * 60 - 5, TimeUnit.MINUTES);
+        taskManager.scheduleAtFixedRate("fake_disconnect", this::fakeDisconnect, 25, 25, TimeUnit.MILLISECONDS);
+        tradeHandler.scheduleTasks();
+        orderBookHandler.scheduleTasks();
+        log.info("Periodic tasks scheduled");
+    }
+
+    protected void cancelTasks() {
+        log.info("Cancelling periodic tasks...");
+        taskManager.cancel(WEBSOCKET_PING_TASK_KEY);
+        taskManager.cancel(WEBSOCKET_RECONNECT_TASK_KEY);
+        tradeHandler.cancelTasks();
+        orderBookHandler.cancelTasks();
+        log.info("Periodic tasks cancelled");
+    }
+
+    protected void connectUserDataStream() {
+        log.info("Subscribing user data stream...");
+        listenKey = apiService.getUserStreamKey().getSuccessResponse();
+        log.debug(String.format("Acquired listenKey: %s", listenKey));
+        if (listenKey != null) {
+            send(String.format("{\"method\": \"SUBSCRIBE\", \"params\": [\"%s\"], \"id\": 3}", listenKey));
+            taskManager.scheduleAtFixedRate(USER_DATA_STREAM_PING_TASK_KEY, () -> {
+                log.info("Sending user data stream ping...");
                 apiService.keepAliveUserStreamKey();
-            }
-        }, TaskManager.Type.PERIOD, 59, 59, TimeUnit.MINUTES);
+            }, 59, 59, TimeUnit.MINUTES);
+            log.info("User data stream opened");
+        }
+    }
+
+    protected void disconnectUserDataStream() {
+        log.info("Unsubscribing user data stream...");
+        if (listenKey != null) {
+            send(String.format("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"%s\"], \"id\": 3}", listenKey));
+            log.debug(String.format("Removing listenKey: %s", listenKey));
+            apiService.removeUserStreamKey();
+            taskManager.cancel(USER_DATA_STREAM_PING_TASK_KEY);
+            listenKey = null;
+            log.info("User data stream closed");
+        }
+    }
+
+    @Override
+    public void close() {
+        if (!isReady()) {
+            log.warn("Trying to close an already closed WebSocket service.");
+            return;
+        }
+        log.info("Closing WebSocket service...");
+        unsubscribeFromStreams();
+        super.close();
+        log.info("WebSocket service closed.");
     }
 
     public boolean isReady() {
@@ -141,54 +187,50 @@ public class WebSocketService extends WebSocketClient {
     }
 
     private void setReady(boolean ready) {
-        if (isReady.get() == ready)
+        if (isReady.get() == ready) {
+            log.warn(String.format("WebSocket ready state unchanged: %s", ready));
             return;
+        }
         isReady.set(ready);
-        Log.info("websocket ready state changed :: " + ready);
+        log.info(String.format("WebSocket ready state changed: %s", ready));
         if (callback != null)
             callback.notifyWebsocketStateChanged(ready);
     }
 
     public void setCallback(WebSocketCallback callback) {
         this.callback = callback;
-        Log.info(String.format("callback added %s", callback.getClass().getName()));
+        log.info(String.format("Callback set: %s", callback.getClass().getName()));
     }
 
     public void logAll() {
-        Log.debug(String.format("""
-                        symbol: %s
-                        listenKey: %s
-                        this.isOpen(): %s
-                        this.isReady(): %s
+        log.debug(String.format("""
+                        WebSocket State:
+                        Symbol: %s
+                        ListenKey: %s
+                        IsOpen: %s
+                        IsReady: %s
                         """,
-                symbol,
-                listenKey,
-                this.isOpen(),
-                this.isReady()
-        ));
+                symbol, listenKey, this.isOpen(), this.isReady()));
     }
 
     public static int reconnectsCount = 0;
     private void fakeDisconnect() {
         long openTime = System.currentTimeMillis() - fakeOpenTime;
-        if (openTime > -20L + reconnectsCount * 10L && openTime < 10L + reconnectsCount * 10L) {
-            if (!isReady()) {
+        if (openTime > -30L + reconnectsCount * 5L && openTime < reconnectsCount * 5L) {
+            if (!isReady())
                 return;
-            }
+            log.info("Simulating lost WebSocket connection...");
             this.setReady(false);
-            Log.info("<<<<FAKE>>>> fake disconnect for duration :: " + openTime);
-            Log.info("<<<<FAKE>>>> current positions count :: " + reconnectsCount);
-            Log.info("<<<<FAKE>>>> fake open time :: ", fakeOpenTime);
-            long rerunTaskDelay = new Random().nextLong(1_000L, 30_000L);
-            Log.info("<<<<FAKE>>>> reconnect after :: " + rerunTaskDelay);
-            taskManager.create("reset_ws_ready_state", () -> {
-                Log.info("<<<<FAKE>>>> reconnect is running..");
+            long rerunTaskDelay = new Random().nextLong(1_000L, 180_000L);
+            log.info("Reconnect on " + TimeFormatter.format(System.currentTimeMillis() + rerunTaskDelay));
+            taskManager.schedule("reset_ws_ready_state", () -> {
                 this.setReady(true);
-                reconnectsCount++;
-                Log.info("<<<<FAKE>>>> reconnects count increased  :: " + reconnectsCount);
-                fakeOpenTime = System.currentTimeMillis() + 120_000L;
-                Log.info("<<<<FAKE>>>> next position open time :: ", fakeOpenTime);
-            }, TaskManager.Type.DELAYED, rerunTaskDelay, -1, TimeUnit.MILLISECONDS);
+                log.info("Connection recovered back " + reconnectsCount++);
+                if (System.currentTimeMillis() > fakeOpenTime) {
+                    fakeOpenTime = System.currentTimeMillis() + 30_000L;
+                    log.info("Updating next open position time to " + TimeFormatter.format(fakeOpenTime));
+                }
+            }, rerunTaskDelay, TimeUnit.MILLISECONDS);
         }
     }
 }

@@ -1,11 +1,12 @@
 package org.tradebot.domain;
 
+import org.tradebot.service.TradingBot;
 import org.tradebot.util.TimeFormatter;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 
-import static org.tradebot.service.TradingBot.precision;
+import static org.tradebot.service.TradingBot.DEFAULT_PRECISION;
 
 public class Order {
 
@@ -98,7 +99,10 @@ public class Order {
     }
 
     public void setPrice(double price) {
-        this.price = BigDecimal.valueOf(price).setScale(precision.price(), RoundingMode.HALF_UP);
+        Precision precision = DEFAULT_PRECISION;
+        if (TradingBot.getInstance() != null && TradingBot.getInstance().getPrecision() != null) {
+            precision = TradingBot.getInstance().getPrecision();
+        }this.price = BigDecimal.valueOf(price).setScale(precision.price(), RoundingMode.HALF_UP);
     }
 
     public BigDecimal getQuantity() {
@@ -106,6 +110,10 @@ public class Order {
     }
 
     public void setQuantity(double quantity) {
+        Precision precision = DEFAULT_PRECISION;
+        if (TradingBot.getInstance() != null && TradingBot.getInstance().getPrecision() != null) {
+            precision = TradingBot.getInstance().getPrecision();
+        }
         this.quantity = BigDecimal.valueOf(quantity).setScale(precision.quantity(), RoundingMode.DOWN);
     }
 
@@ -114,6 +122,10 @@ public class Order {
     }
 
     public void setStopPrice(double stopPrice) {
+        Precision precision = DEFAULT_PRECISION;
+        if (TradingBot.getInstance() != null && TradingBot.getInstance().getPrecision() != null) {
+            precision = TradingBot.getInstance().getPrecision();
+        }
         this.stopPrice = BigDecimal.valueOf(stopPrice).setScale(precision.price(), RoundingMode.HALF_UP);
     }
 

@@ -8,7 +8,8 @@ import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
-import org.tradebot.util.TaskManager;
+import org.tradebot.domain.HTTPResponse;
+import org.tradebot.service.TaskManager;
 
 import java.util.concurrent.TimeUnit;
 
@@ -30,7 +31,7 @@ class WebSocketServiceTest {
     private UserDataHandler userDataHandler;
 
     @Mock
-    private RestAPIService apiService;
+    private APIService apiService;
 
     @Mock
     private TaskManager taskManager;
@@ -39,7 +40,6 @@ class WebSocketServiceTest {
     void setUp() {
         MockitoAnnotations.openMocks(this);
         webSocketService = spy(new WebSocketService("BTCUSDT", tradeHandler, orderBookHandler, userDataHandler, apiService, taskManager));
-        doNothing().when(webSocketService).close();
         doNothing().when(webSocketService).connect();
         doNothing().when(webSocketService).reconnect();
         doNothing().when(webSocketService).run();
@@ -51,10 +51,12 @@ class WebSocketServiceTest {
     void testOnOpen() {
         when(webSocketService.isOpen()).thenReturn(true);
         ServerHandshake handshake = mock(ServerHandshake.class);
+        when(apiService.getUserStreamKey()).thenReturn(HTTPResponse.success(200, "mockListenKey"));
         webSocketService.onOpen(handshake);
 
         verify(webSocketService, times(1)).send(eq("{\"method\": \"SUBSCRIBE\", \"params\": [\"btcusdt@trade\"], \"id\": 1}"));
         verify(webSocketService, times(1)).send(eq("{\"method\": \"SUBSCRIBE\", \"params\": [\"btcusdt@depth@100ms\"], \"id\": 2}"));
+        verify(webSocketService, times(1)).send(eq("{\"method\": \"SUBSCRIBE\", \"params\": [\"mockListenKey\"], \"id\": 3}"));
         assertTrue(webSocketService.isReady());
     }
 
@@ -116,7 +118,7 @@ class WebSocketServiceTest {
         verify(webSocketService, times(1)).send(eq("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"btcusdt@trade\"], \"id\": 1}"));
         verify(webSocketService, times(1)).send(eq("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"btcusdt@depth@100ms\"], \"id\": 2}"));
         verify(webSocketService, times(1)).send(eq("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"\"], \"id\": 3}"));
-        verify(taskManager, times(1)).stop("user_data_stream_ping");
+        verify(taskManager, times(1)).cancel("user_data_stream_ping");
         verify(apiService, times(1)).removeUserStreamKey();
         verify(webSocketService, times(1)).reconnectBlocking();
     }
@@ -124,13 +126,15 @@ class WebSocketServiceTest {
     @Test
     void testStopService() {
         when(webSocketService.isReady()).thenReturn(true);
+        when(apiService.getUserStreamKey()).thenReturn(HTTPResponse.success(200, "mockListenKey"));
+        webSocketService.connectUserDataStream();
 
-        webSocketService.stop();
+        webSocketService.close();
 
         verify(webSocketService, times(1)).send(eq("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"btcusdt@trade\"], \"id\": 1}"));
         verify(webSocketService, times(1)).send(eq("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"btcusdt@depth@100ms\"], \"id\": 2}"));
-        verify(webSocketService, times(1)).send(eq("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"\"], \"id\": 3}"));
-        verify(taskManager, times(1)).stop("user_data_stream_ping");
+        verify(webSocketService, times(1)).send(eq("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"mockListenKey\"], \"id\": 3}"));
+        verify(taskManager, times(1)).cancel("user_data_stream_ping");
         verify(apiService, times(1)).removeUserStreamKey();
         verify(webSocketService, times(1)).close();
         assertFalse(webSocketService.isReady.get());
@@ -139,12 +143,12 @@ class WebSocketServiceTest {
     @Test
     void testConnectUserDataStream_enable() {
         when(webSocketService.isReady()).thenReturn(true);
-        when(apiService.getUserStreamKey()).thenReturn("mockListenKey");
+        when(apiService.getUserStreamKey()).thenReturn(HTTPResponse.success(200, "mockListenKey"));
 
         webSocketService.connectUserDataStream();
 
         verify(apiService, times(1)).getUserStreamKey();
-        verify(taskManager, times(1)).create(eq("user_data_stream_ping"), any(), any(), eq(59L), eq(59L), eq(TimeUnit.MINUTES));
+        verify(taskManager, times(1)).scheduleAtFixedRate(eq("user_data_stream_ping"), any(), eq(59L), eq(59L), eq(TimeUnit.MINUTES));
         verify(webSocketService, times(1)).send(eq("{\"method\": \"SUBSCRIBE\", \"params\": [\"mockListenKey\"], \"id\": 3}"));
     }
 
@@ -152,9 +156,9 @@ class WebSocketServiceTest {
     void testConnectUserDataStream_disableWhenWsIsNotReady() {
         when(webSocketService.isReady()).thenReturn(false);
 
-        webSocketService.connectUserDataStream();
+        webSocketService.disconnectUserDataStream();
 
         verify(apiService, times(0)).removeUserStreamKey();
-        verify(taskManager, times(0)).stop(anyString());
+        verify(taskManager, times(0)).cancel(anyString());
     }
 }

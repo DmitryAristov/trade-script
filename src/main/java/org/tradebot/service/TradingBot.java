@@ -1,22 +1,29 @@
 package org.tradebot.service;
 
-import org.tradebot.binance.RestAPIService;
+import org.tradebot.binance.APIService;
 import org.tradebot.binance.OrderBookHandler;
 import org.tradebot.binance.UserDataHandler;
 import org.tradebot.binance.WebSocketService;
-import org.tradebot.binance.HttpClientService;
+import org.tradebot.binance.HttpClient;
 import org.tradebot.binance.TradeHandler;
 import org.tradebot.domain.AccountInfo;
 import org.tradebot.domain.Precision;
+import org.tradebot.service.strategy_state_handlers.*;
 import org.tradebot.util.Log;
-import org.tradebot.util.TaskManager;
 
 public class TradingBot {
+    private final Log log = new Log();
+    public static final Precision DEFAULT_PRECISION = new Precision(1, 2);
 
-    public final int leverage;
-    public final String symbol;
-    public static Precision precision;
-    protected static TradingBot instance;
+    private final int leverage;
+    private final String symbol;
+    private final Precision precision;
+
+    private static TradingBot instance;
+
+    public static TradingBot getInstance() {
+        return instance;
+    }
 
     public static TradingBot createBot(String symbol, int leverage) {
         if (instance == null) {
@@ -25,21 +32,19 @@ public class TradingBot {
         return instance;
     }
 
-    public static TradingBot getInstance() {
-        return instance;
-    }
-
     protected TradingBot(String symbol, int leverage) {
+        log.info(String.format("Creating '%s' bot with %d leverage", symbol, leverage));
         this.symbol = symbol;
         this.leverage = leverage;
-        Log.info(String.format("'%s' bot created with leverage :: %d", symbol, leverage));
-        precision = apiService.fetchSymbolPrecision(symbol);
-        Log.info("precision :: " + precision);
+        precision = apiService.fetchSymbolPrecision(symbol).getSuccessResponse();
+        log.info(String.format("'%s' bot created precision: %s", symbol, precision));
     }
 
-    protected final HttpClientService httpClient = new HttpClientService();
-    protected final RestAPIService apiService = new RestAPIService(httpClient);
+    protected final HttpClient httpClient = new HttpClient();
+    protected final APIService apiService = new APIService(httpClient);
     protected final TaskManager taskManager = new TaskManager();
+    protected StrategyStateDispatcher stateDispatcher;
+    protected OrderManager orderManager;
     protected ImbalanceService imbalanceService;
     protected Strategy strategy;
     protected VolatilityService volatilityService;
@@ -49,28 +54,39 @@ public class TradingBot {
     protected UserDataHandler userDataStreamHandler;
 
     public void start() {
-        AccountInfo accountInfo = apiService.getAccountInfo();
+        AccountInfo accountInfo = apiService.getAccountInfo().getSuccessResponse();
         if (!accountInfo.canTrade()) {
-            throw new RuntimeException("account cannot trade");
+            throw log.throwError("Account cannot trade");
         }
 
         double balance = accountInfo.availableBalance();
         if (balance <= 0) {
-            throw new RuntimeException("no available balance to trade");
+            throw log.throwError("Not enough balance to trade");
         }
 
         apiService.setLeverage(symbol, leverage);
-        if (apiService.getLeverage(symbol) != leverage) {
-            throw new RuntimeException("leverage is incorrect");
+        if (apiService.getLeverage(symbol).getSuccessResponse() != leverage) {
+            throw log.throwError("Leverage is incorrect or was not set");
         }
 
         imbalanceService = new ImbalanceService();
         tradeHandler = new TradeHandler(taskManager);
-        userDataStreamHandler = new UserDataHandler();
+        userDataStreamHandler = new UserDataHandler(symbol);
         orderBookHandler = new OrderBookHandler(symbol, apiService, taskManager);
         webSocketService = new WebSocketService(symbol, tradeHandler, orderBookHandler, userDataStreamHandler, apiService, taskManager);
         volatilityService = new VolatilityService(symbol, apiService, taskManager);
-        strategy = new Strategy(symbol, leverage, apiService, taskManager);
+
+        strategy = new Strategy(apiService, taskManager, symbol, leverage);
+        orderManager = new OrderManager(taskManager, apiService, symbol, leverage);
+
+        stateDispatcher = new StrategyStateDispatcher(orderManager);
+        stateDispatcher.registerHandler(Strategy.State.POSITION_EMPTY, new EmptyPositionStateHandler(orderManager));
+        stateDispatcher.registerHandler(Strategy.State.OPEN_ORDER_PLACED, new OpenPositionOrderPlacedStateHandler(apiService, orderManager, symbol));
+        stateDispatcher.registerHandler(Strategy.State.POSITION_OPENED, new PositionOpenedStateHandler(apiService, orderManager, symbol));
+        stateDispatcher.registerHandler(Strategy.State.CLOSING_ORDERS_CREATED, new ClosingOrdersCreatedStateHandler(apiService, orderManager, symbol));
+
+        strategy.setOrderManager(orderManager);
+        strategy.setStateDispatcher(stateDispatcher);
 
         imbalanceService.setCallback(strategy);
         tradeHandler.setCallback(imbalanceService);
@@ -80,24 +96,29 @@ public class TradingBot {
         webSocketService.setCallback(strategy);
         webSocketService.connect();
 
-        Log.info("bot started");
+        log.info(String.format("'%s' bot started", symbol));
     }
 
-    public static void exit(String message) {
-        Log.info("exiting from bot :: '" + message + "'");
+    public void exit(String message) {
+        log.info(String.format("Exiting from bot: %s", message));
 
         try {
-            TradingBot.logAll();
-            TradingBot.getInstance().webSocketService.stop();
-            TradingBot.getInstance().taskManager.stopAll();
+            TradingBot.getInstance().taskManager.cancelAll();
+            TradingBot.getInstance().webSocketService.close();
+            TradingBot.getInstance().logAll();
         } catch (Exception e) {
-            Log.warn(e);
+            log.error("failed to stop bot normally", e);
         }
 
+        log.info("Shutdown Java...");
         System.exit(0);
     }
 
-    public static void logAll() {
+    public Precision getPrecision() {
+        return precision;
+    }
+
+    public void logAll() {
         if (instance != null) {
             if (instance.imbalanceService != null)
                 instance.imbalanceService.logAll();

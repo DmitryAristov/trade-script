@@ -4,7 +4,13 @@ import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.io.File;
+import java.text.SimpleDateFormat;
 import java.util.Arrays;
+import java.util.Date;
+import java.util.Objects;
+
+import static org.tradebot.util.Log.Level.*;
 
 public class Log {
 
@@ -16,85 +22,86 @@ public class Log {
     }
 
     public static final String LOGS_DIR_PATH = System.getProperty("user.dir") + "/src/main/resources/logs/";
-    public static final String INFO_LOGS_PATH = LOGS_DIR_PATH + "info.log";
-    public static final String DEBUG_LOGS_PATH = LOGS_DIR_PATH + "debug.log";
-    public static final String MARKET_DATA_LOGS_PATH = LOGS_DIR_PATH + "market_data.log";
-    public static final String ORDER_BOOK_LOGS_PATH = LOGS_DIR_PATH + "order_book.log";
+    private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd");
 
     static {
-        resetLogFile(INFO_LOGS_PATH);
-        resetLogFile(DEBUG_LOGS_PATH);
-        resetLogFile(MARKET_DATA_LOGS_PATH);
-        resetLogFile(ORDER_BOOK_LOGS_PATH);
+        ensureLogDirectoryExists();
+        resetLogFiles();
     }
 
-    private static void resetLogFile(String path) {
-        try (RandomAccessFile file = new RandomAccessFile(path, "rw")) {
-            file.setLength(0);
-        } catch (IOException _) {  }
+    private String path = null;
+
+    public Log() {  }
+
+    public Log(String path) {
+        this.path = path;
     }
 
-    public static void debug(String message) {
-        log(message, Level.DEBUG);
+    public void debug(String message) {
+        log(message, DEBUG);
     }
 
-    public static RuntimeException error(Exception exception) {
-        log("exception got: " +
-                        exception.getMessage() +
-                        Arrays.stream(exception.getStackTrace())
-                                .map(StackTraceElement::toString)
-                                .reduce("", (s1, s2) -> s1 + "\n    at " + s2),
-                Level.ERROR);
-        return new RuntimeException(exception);
+    public void debug(String message, long mills) {
+        log(message, DEBUG, mills);
     }
 
-    public static RuntimeException error(String message) {
-        log("error got: " + message, Level.ERROR);
+    public void info(String message) {
+        log(message, INFO);
+    }
+
+    public void info(String message, long mills) {
+        log(message, INFO, mills);
+    }
+
+    public void warn(String message) {
+        log(message, WARN);
+    }
+
+    public void error(String message) {
+        log(message, ERROR);
+    }
+
+    public RuntimeException throwError(String message) {
+        log(message, ERROR);
         return new RuntimeException(message);
     }
 
-    public static void info(String message) {
-        log(message, Level.INFO);
+    public RuntimeException throwError(String message, Exception exception) {
+        error(message, exception);
+        return new RuntimeException(exception);
     }
 
-    public static void info(String message, long mills) {
-        log(message, Level.INFO, mills);
-    }
-
-    public static void warn(String message) {
-        log(message, Level.WARN);
-    }
-
-    public static void warn(Exception exception) {
-        log("exception got: " +
+    public void error(String message, Exception exception) {
+        log(exception.getClass() + ": " + message + ", caused by :: " +
                         exception.getMessage() +
                         Arrays.stream(exception.getStackTrace())
                                 .map(StackTraceElement::toString)
                                 .reduce("", (s1, s2) -> s1 + "\n    at " + s2),
-                Level.WARN);
+                ERROR);
     }
 
-    private static void log(String message, Level level) {
+    private void log(String message, Level level) {
         log(message, level, -1);
     }
 
-    private static void log(String message, Level level, long mills) {
+    private void log(String message, Level level, long mills) {
         String classAndMethodName = getClassAndMethod();
-        String logEntry = level + ((level == Level.INFO) ? " " : "") + " [" + TimeFormatter.now() + "] " + classAndMethodName + message;
+        String logEntry = "[" + TimeFormatter.now() + "] " + level + ((level == INFO || level == WARN) ? "  " : " ") + classAndMethodName + message;
 
         if (mills != -1) {
             logEntry += " on " + TimeFormatter.format(mills) + " (" + mills + ")";
         }
 
-        writeLogFile(logEntry, DEBUG_LOGS_PATH);
+        writeLogFile(logEntry, Objects.requireNonNullElse(path, "debug"));
 
-        if (level != Level.DEBUG){
-            writeLogFile(logEntry, INFO_LOGS_PATH);
+        if (level != DEBUG) {
+            writeLogFile(logEntry, "info");
         }
     }
 
-    private static void writeLogFile(String logEntry, String filePath) {
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(filePath, true))) {
+    private void writeLogFile(String logEntry, String filePath) {
+        String dateSuffix = "_" + DATE_FORMAT.format(new Date()) + ".log";
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(LOGS_DIR_PATH + filePath + dateSuffix, true))) {
             writer.write(logEntry);
             writer.newLine();
         } catch (IOException e) {
@@ -102,7 +109,7 @@ public class Log {
         }
     }
 
-    private static String getClassAndMethod() {
+    private String getClassAndMethod() {
         StackTraceElement[] stackTrace = Thread.currentThread().getStackTrace();
         int i = 1;
         String fullClassName = stackTrace[i].getClassName();
@@ -115,18 +122,31 @@ public class Log {
         return simpleClassName + "." + methodName + " :::: ";
     }
 
+    public static void resetLogFiles() {
+        File directory = new File(LOGS_DIR_PATH);
+        if (!directory.isDirectory()) {
+            return;
+        }
 
+        File[] files = directory.listFiles();
+        if (files == null) {
+            return;
+        }
 
-
-
-    public static void info(String message, String path) {
-        String classAndMethodName = getClassAndMethod();
-        String logEntry = Level.INFO + " [" + TimeFormatter.now() + "] " + classAndMethodName + message;
-
-        writeLogFile(logEntry, path);
+        for (File file : files) {
+            if (file.isFile()) {
+                resetLogFile(file.getAbsolutePath());
+            }
+        }
     }
 
-    public static void removeLines(int count, String path) {
+    public static void resetLogFile(String path) {
+        try (RandomAccessFile file = new RandomAccessFile(path, "rw")) {
+            file.setLength(0);
+        } catch (IOException _) {  }
+    }
+
+    public void removeLines(int count, String path) {
         try (RandomAccessFile file = new RandomAccessFile(path, "rw")) {
             long length = file.length();
             int linesCount = 0;
@@ -141,6 +161,16 @@ public class Log {
             file.setLength(length + 1);
         } catch (IOException e) {
             e.printStackTrace();
+        }
+    }
+
+    private static void ensureLogDirectoryExists() {
+        File directory = new File(LOGS_DIR_PATH);
+        if (!directory.exists()) {
+            boolean created = directory.mkdirs();
+            if (!created) {
+                throw new RuntimeException("Failed to create log directory: " + LOGS_DIR_PATH);
+            }
         }
     }
 }

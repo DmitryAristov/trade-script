@@ -4,6 +4,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
 import org.mockito.MockitoAnnotations;
+import org.tradebot.domain.APIError;
+import org.tradebot.domain.HTTPResponse;
 
 import java.net.HttpURLConnection;
 import java.util.HashMap;
@@ -12,15 +14,15 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-class HttpClientServiceTest {
+class HttpClientTest {
 
     @InjectMocks
-    private HttpClientService httpClientService;
+    private HttpClient httpClient;
 
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        httpClientService = spy(new HttpClientService());
+        httpClient = spy(new HttpClient());
     }
 
     @Test
@@ -30,7 +32,7 @@ class HttpClientServiceTest {
         params.put("side", "BUY");
         params.put("type", "LIMIT");
 
-        String signature = httpClientService.generateSignature(params);
+        String signature = httpClient.generateSignature(params);
 
         assertNotNull(signature);
         assertNotNull(signature);
@@ -44,7 +46,7 @@ class HttpClientServiceTest {
         params.put("side", "BUY");
         params.put("type", "LIMIT");
 
-        String paramString = httpClientService.getParamsString(params);
+        String paramString = httpClient.getParamsString(params);
         assertEquals("side=BUY&symbol=BTCUSDT&type=LIMIT", paramString);
     }
 
@@ -58,12 +60,12 @@ class HttpClientServiceTest {
         HttpURLConnection connection = mock(HttpURLConnection.class);
         when(connection.getResponseCode()).thenReturn(200);
 
-        doReturn("mocked-response").when(httpClientService)
+        doReturn(HTTPResponse.success(200, "mocked-response")).when(httpClient)
                 .sendRequest(anyString(), anyString(), anyMap());
+        HTTPResponse<String, APIError> response = httpClient.sendRequest("/fapi/v1/order", "POST", params);
 
-        String response = httpClientService.sendRequest("/fapi/v1/order", "POST", params);
-
-        assertEquals("mocked-response", response);
+        assertTrue(response.isSuccess());
+        assertEquals("mocked-response", response.getValue());
     }
 
     @Test
@@ -75,13 +77,12 @@ class HttpClientServiceTest {
 
         HttpURLConnection connection = mock(HttpURLConnection.class);
         when(connection.getResponseCode()).thenReturn(400);
-
-        doThrow(new RuntimeException("mocked error")).when(httpClientService)
+        doReturn(HTTPResponse.error(500, "mocked-error")).when(httpClient)
                 .sendRequest(anyString(), anyString(), anyMap());
 
-        Exception exception = assertThrows(RuntimeException.class, () ->
-                httpClientService.sendRequest("/fapi/v1/order", "POST", params));
+        HTTPResponse<String, APIError> response = httpClient.sendRequest("/fapi/v1/order", "POST", params);
 
-        assertEquals("mocked error", exception.getMessage());
+        assertTrue(response.isError());
+        assertEquals("mocked-error", response.getError());
     }
 }

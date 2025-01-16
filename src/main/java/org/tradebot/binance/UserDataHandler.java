@@ -4,14 +4,19 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import org.tradebot.domain.Position;
 import org.tradebot.listener.UserDataCallback;
-import org.tradebot.service.TradingBot;
 import org.tradebot.util.Log;
 
 public class UserDataHandler {
+    private final Log log = new Log();
+    private final String symbol;
     protected UserDataCallback callback;
 
+    public UserDataHandler(String symbol) {
+        this.symbol = symbol;
+    }
+
     public void onMessage(String eventType, JSONObject message) {
-        Log.debug("user data stream message :: " + message.toString());
+        log.debug(String.format("Received event: '%s'. Message: '%s'", eventType, message));
         if ("ORDER_TRADE_UPDATE".equals(eventType)) {
             JSONObject orderJson = message.getJSONObject("o");
             String status = orderJson.getString("X");
@@ -47,15 +52,15 @@ public class UserDataHandler {
         return positionUpdate.has("ps") &&
                 "BOTH".equals(positionUpdate.getString("ps")) &&
                 positionUpdate.has("s") &&
-                TradingBot.getInstance().symbol.toUpperCase().equals(positionUpdate.getString("s"));
+                symbol.toUpperCase().equals(positionUpdate.getString("s"));
     }
 
     public void setCallback(UserDataCallback callback) {
         this.callback = callback;
-        Log.info(String.format("callback added %s", callback.getClass().getName()));
+        log.info(String.format("Callback set: %s", callback.getClass().getName()));
     }
 
     public void logAll() {
-        Log.debug(String.format("callback :: %s", callback));
+        log.debug(String.format("callback: %s", callback));
     }
 }

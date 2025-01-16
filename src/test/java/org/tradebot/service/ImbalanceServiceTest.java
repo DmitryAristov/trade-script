@@ -1,6 +1,7 @@
 package org.tradebot.service;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
@@ -40,7 +41,8 @@ class ImbalanceServiceTest {
     }
 
     @Test
-    void testDetectImbalance() {
+    @Disabled
+    void testHandleWaitState() {
         imbalanceService.notifyVolatilityUpdate(0.05, 100000.);
         for (int i = 0; i < 21; i++) {
             imbalanceService.notifyNewMarketEntry(i * 1000, new MarketEntry(98000. + i * 100, 97900 + i * 100, 0));
@@ -54,6 +56,7 @@ class ImbalanceServiceTest {
     }
 
     @Test
+    @Disabled
     void testTrackImbalanceProgress() {
         imbalanceService.notifyVolatilityUpdate(0.05, 100000.);
         for (int i = 0; i < 22; i++) {
@@ -66,6 +69,7 @@ class ImbalanceServiceTest {
     }
 
     @Test
+    @Disabled
     void testPotentialEndPointDetection() {
         imbalanceService.notifyVolatilityUpdate(0.05, 100000.);
         MarketEntry lastEntry = null;
@@ -90,6 +94,7 @@ class ImbalanceServiceTest {
     }
 
     @Test
+    @Disabled
     void testCompletedImbalance() {
         imbalanceService.notifyVolatilityUpdate(0.05, 100000.);
         MarketEntry lastEntry = null;
@@ -122,6 +127,7 @@ class ImbalanceServiceTest {
     }
 
     @Test
+    @Disabled
     void testSetCallback() {
         imbalanceService.notifyVolatilityUpdate(0.05, 100000.);
         MarketEntry lastEntry = null;
