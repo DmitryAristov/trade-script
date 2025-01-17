@@ -10,6 +10,7 @@ import org.mockito.MockitoAnnotations;
 import org.tradebot.domain.HTTPResponse;
 import org.tradebot.domain.OrderBook;
 import org.tradebot.listener.OrderBookCallback;
+import org.tradebot.listener.ReadyStateCallback;
 import org.tradebot.service.TaskManager;
 
 import java.util.HashMap;
@@ -26,6 +27,9 @@ class OrderBookHandlerTest {
 
     @Mock
     private OrderBookCallback callback;
+
+    @Mock
+    private ReadyStateCallback readyStateCallback;
 
     @Mock
     private TaskManager taskManager;
@@ -65,6 +69,7 @@ class OrderBookHandlerTest {
         OrderBook mockOrderBook = new OrderBook(123456, asks, bids);
 
         when(apiService.getOrderBookPublicAPI(anyString())).thenReturn(HTTPResponse.success(200, mockOrderBook));
+        orderBookHandler.setReadyCallback(readyStateCallback);
 
         JSONObject message = new JSONObject();
         message.put("U", 123455);

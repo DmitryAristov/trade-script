@@ -36,7 +36,7 @@ public class TradingBot {
         log.info(String.format("Creating '%s' bot with %d leverage", symbol, leverage));
         this.symbol = symbol;
         this.leverage = leverage;
-        precision = apiService.fetchSymbolPrecision(symbol).getSuccessResponse();
+        precision = apiService.fetchSymbolPrecision(symbol).getResponse();
         log.info(String.format("'%s' bot created precision: %s", symbol, precision));
     }
 
@@ -54,7 +54,11 @@ public class TradingBot {
     protected UserDataHandler userDataStreamHandler;
 
     public void start() {
-        AccountInfo accountInfo = apiService.getAccountInfo().getSuccessResponse();
+        long binanceTime = apiService.getBinanceServerTime().getResponse();
+        HttpClient.TIME_DIFF = binanceTime - System.currentTimeMillis();
+        log.info("Local and Binance server time difference in mills: " + HttpClient.TIME_DIFF);
+
+        AccountInfo accountInfo = apiService.getAccountInfo().getResponse();
         if (!accountInfo.canTrade()) {
             throw log.throwError("Account cannot trade");
         }
@@ -65,7 +69,7 @@ public class TradingBot {
         }
 
         apiService.setLeverage(symbol, leverage);
-        if (apiService.getLeverage(symbol).getSuccessResponse() != leverage) {
+        if (apiService.getLeverage(symbol).getResponse() != leverage) {
             throw log.throwError("Leverage is incorrect or was not set");
         }
 
@@ -92,6 +96,7 @@ public class TradingBot {
         tradeHandler.setCallback(imbalanceService);
         volatilityService.setCallback(imbalanceService);
         orderBookHandler.setCallback(strategy);
+        orderBookHandler.setReadyCallback(webSocketService);
         userDataStreamHandler.setCallback(strategy);
         webSocketService.setCallback(strategy);
         webSocketService.connect();

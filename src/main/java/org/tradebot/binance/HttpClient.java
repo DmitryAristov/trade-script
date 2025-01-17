@@ -11,7 +11,6 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -24,6 +23,7 @@ public class HttpClient {
     private static final String API_SECRET = "****";
     protected static final String BASE_URL = "https://fapi.binance.com";
     private final Log log = new Log();
+    public static long TIME_DIFF = 0;
 
     public HTTPResponse<String, APIError> sendRequest(String endpoint, String method, Map<String, String> params) {
         return sendRequest(endpoint, method, params, false);
@@ -32,15 +32,15 @@ public class HttpClient {
     public HTTPResponse<String, APIError> sendRequest(String endpoint, String method, Map<String, String> params, boolean useBody) {
         try {
             long start = System.nanoTime();
-            Map<String, String> attemptParams = new HashMap<>(params);
             log.debug(String.format("[REQUEST START] HTTP %s to %s", method, endpoint));
-            log.debug(String.format("Initial params: %s", attemptParams));
+            log.debug(String.format("Initial params: %s", params));
 
-            attemptParams.put("timestamp", String.valueOf(System.currentTimeMillis()));
-            String signature = generateSignature(attemptParams);
-            attemptParams.put("signature", signature);
+            params.put("recvWindow", "5000");
+            params.put("timestamp", String.valueOf(System.currentTimeMillis() + TIME_DIFF));
+            String signature = generateSignature(params);
+            params.put("signature", signature);
 
-            String query = getParamsString(attemptParams);
+            String query = getParamsString(params);
             URL url = useBody
                     ? new URI(BASE_URL + endpoint).toURL()
                     : new URI(BASE_URL + endpoint + "?" + query).toURL();
@@ -69,7 +69,7 @@ public class HttpClient {
             log.debug(String.format("[REQUEST END] HTTP %s to %s completed in %.2f ms", method, endpoint, elapsedMs));
             return readResponse(connection, responseCode);
         } catch (Exception e) {
-            throw log.throwError("Failed to send HTTP request after multiple retries", e);
+            throw log.throwError("Failed to send HTTP request", e);
         }
     }
 
@@ -111,14 +111,17 @@ public class HttpClient {
                 .collect(Collectors.joining("&"));
     }
 
-    public HTTPResponse<String, APIError> sendPublicRequest(String request) {
+    public HTTPResponse<String, APIError> sendPublicRequest(String endpoint, String method, Map<String, String> params) {
         try {
             long start = System.nanoTime();
-            log.debug(String.format("[REQUEST START] HTTP GET to %s", request));
+            log.debug(String.format("[REQUEST START] HTTP %s to %s", method, endpoint));
 
-            URL url = new URI(request).toURL();
+            String query = getParamsString(params);
+            URL url = new URI(BASE_URL + endpoint + "?" + query).toURL();
+            log.debug(String.format("Generated URL: %s", url));
+
             HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-            connection.setRequestMethod("GET");
+            connection.setRequestMethod(method);
             log.debug(String.format("Request properties: %s", connection.getRequestProperties()));
 
             // response
@@ -128,11 +131,11 @@ public class HttpClient {
 
             long finish = System.nanoTime();
             double elapsedMs = (finish - start) / 1_000_000.0;
-            log.debug(String.format("[REQUEST END] HTTP GET to %s completed in %.2f ms", request, elapsedMs));
+            log.debug(String.format("[REQUEST END] HTTP GET to %s completed in %.2f ms", endpoint, elapsedMs));
 
             return readResponse(connection, responseCode);
         } catch (Exception e) {
-            throw log.throwError("Failed to send HTTP request after multiple retries", e);
+            throw log.throwError("Failed to send HTTP request", e);
         }
     }
 }

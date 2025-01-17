@@ -8,6 +8,7 @@ public class Position {
 
     private double entryPrice;
     private double positionAmt;
+    private double breakEvenPrice;
 
     public double getEntryPrice() {
         return entryPrice;
@@ -25,13 +26,21 @@ public class Position {
         this.positionAmt = positionAmt;
     }
 
+    public double getBreakEvenPrice() {
+        return breakEvenPrice;
+    }
+
+    public void setBreakEvenPrice(double breakEvenPrice) {
+        this.breakEvenPrice = breakEvenPrice;
+    }
+
     public Type getType() {
         if (positionAmt > 0) {
             return Type.LONG;
         } else if (positionAmt < 0) {
             return Type.SHORT;
         } else {
-            throw new RuntimeException("zero position amount");
+            throw new RuntimeException("Unexpected zero amount");
         }
     }
 
@@ -41,7 +50,8 @@ public class Position {
                         Position
                            entryPrice :: %s
                            positionAmt :: %s
+                           breakEvenPrice :: %s
                         """,
-                entryPrice, positionAmt);
+                entryPrice, positionAmt, breakEvenPrice);
     }
 }

@@ -13,7 +13,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class JsonParser {
 
-    public static final double RISK_LEVEL = 0.25;
+    public static final double RISK_LEVEL = 0.95;
     public static final String BASE_ASSET = "BNFCR";
 
     public static OrderBook parseOrderBook(String response) {
@@ -86,15 +86,16 @@ public class JsonParser {
             JSONObject positionJson = jsonArray.getJSONObject(0);
             double entryPrice = Double.parseDouble(positionJson.getString("entryPrice"));
             double positionAmt = Double.parseDouble(positionJson.getString("positionAmt"));
+            double breakEvenPrice = Double.parseDouble(positionJson.getString("breakEvenPrice"));
             if (entryPrice == 0 || positionAmt == 0) {
                 return null;
             }
             Position result = new Position();
             result.setEntryPrice(entryPrice);
             result.setPositionAmt(positionAmt);
+            result.setBreakEvenPrice(breakEvenPrice);
             return result;
         }
-
     }
 
     public static AccountInfo parseAccountInfo(String value) {

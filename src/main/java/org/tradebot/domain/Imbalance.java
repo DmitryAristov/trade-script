@@ -76,7 +76,7 @@ public class Imbalance implements Serializable {
     }
 
     public double speed() {
-        return size() / duration();
+        return size() / (double) duration();
     }
 
     @Override

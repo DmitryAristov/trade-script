@@ -3,19 +3,16 @@ package org.tradebot.binance;
 import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.handshake.ServerHandshake;
 import org.json.JSONObject;
+import org.tradebot.listener.ReadyStateCallback;
 import org.tradebot.listener.WebSocketCallback;
 import org.tradebot.service.TaskManager;
 import org.tradebot.util.Log;
-import org.tradebot.util.TimeFormatter;
 
 import java.net.URI;
-import java.util.Random;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static org.tradebot.service.ImbalanceService.fakeOpenTime;
-
-public class WebSocketService extends WebSocketClient {
+public class WebSocketService extends WebSocketClient implements ReadyStateCallback {
     public static final String USER_DATA_STREAM_PING_TASK_KEY = "user_data_stream_ping";
     public static final String WEBSOCKET_PING_TASK_KEY = "websocket_ping";
     public static final String WEBSOCKET_RECONNECT_TASK_KEY = "websocket_reconnect";
@@ -30,7 +27,9 @@ public class WebSocketService extends WebSocketClient {
     private WebSocketCallback callback;
 
     private String listenKey = null;
-    protected final AtomicBoolean isReady = new AtomicBoolean(false);
+    protected final AtomicBoolean streamsConnected = new AtomicBoolean(false);
+    protected final AtomicBoolean orderBookReady = new AtomicBoolean(false);
+    protected final AtomicBoolean webSocketReady = new AtomicBoolean(false);
 
     public WebSocketService(String symbol,
                             TradeHandler tradeHandler,
@@ -57,16 +56,16 @@ public class WebSocketService extends WebSocketClient {
         log.info("Subscribing WebSocket depth stream...");
         send(String.format("{\"method\": \"SUBSCRIBE\", \"params\": [\"%s@depth@100ms\"], \"id\": 2}", symbol.toLowerCase()));
         connectUserDataStream();
-        setReady(true);
+
+        streamsConnected.set(true);
+        updateReadyState();
+
         log.info("WebSocket service started.");
     }
 
     @Override
     public void onMessage(String msg) {
         JSONObject message = new JSONObject(msg);
-        if (!isReady()) {
-            return;
-        }
 
         if (message.has("e")) {
             String eventType = message.getString("e");
@@ -107,7 +106,9 @@ public class WebSocketService extends WebSocketClient {
 
     protected void unsubscribeFromStreams() {
         try {
-            setReady(false);
+            streamsConnected.set(false);
+            updateReadyState();
+
             log.info("Unsubscribing from WebSocket trade stream...");
             send(String.format("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"%s@trade\"], \"id\": 1}", symbol.toLowerCase()));
             log.info("Unsubscribing from WebSocket depth stream...");
@@ -129,7 +130,7 @@ public class WebSocketService extends WebSocketClient {
 
         taskManager.scheduleAtFixedRate(WEBSOCKET_RECONNECT_TASK_KEY, this::reconnectWebSocket,
                 24 * 60 - 5, 24 * 60 - 5, TimeUnit.MINUTES);
-        taskManager.scheduleAtFixedRate("fake_disconnect", this::fakeDisconnect, 25, 25, TimeUnit.MILLISECONDS);
+//        taskManager.scheduleAtFixedRate("fake_disconnect", this::fakeDisconnect, 25, 25, TimeUnit.MILLISECONDS);
         tradeHandler.scheduleTasks();
         orderBookHandler.scheduleTasks();
         log.info("Periodic tasks scheduled");
@@ -146,7 +147,7 @@ public class WebSocketService extends WebSocketClient {
 
     protected void connectUserDataStream() {
         log.info("Subscribing user data stream...");
-        listenKey = apiService.getUserStreamKey().getSuccessResponse();
+        listenKey = apiService.getUserStreamKey().getResponse();
         log.debug(String.format("Acquired listenKey: %s", listenKey));
         if (listenKey != null) {
             send(String.format("{\"method\": \"SUBSCRIBE\", \"params\": [\"%s\"], \"id\": 3}", listenKey));
@@ -172,7 +173,7 @@ public class WebSocketService extends WebSocketClient {
 
     @Override
     public void close() {
-        if (!isReady()) {
+        if (isClosed()) {
             log.warn("Trying to close an already closed WebSocket service.");
             return;
         }
@@ -182,19 +183,21 @@ public class WebSocketService extends WebSocketClient {
         log.info("WebSocket service closed.");
     }
 
-    public boolean isReady() {
-        return isReady.get() && isOpen();
+    @Override
+    public void notifyReadyStateUpdate(boolean ready) {
+        this.orderBookReady.set(ready);
+        updateReadyState();
     }
 
-    private void setReady(boolean ready) {
-        if (isReady.get() == ready) {
-            log.warn(String.format("WebSocket ready state unchanged: %s", ready));
-            return;
+    private void updateReadyState() {
+        boolean ready = streamsConnected.get() && isOpen() && this.orderBookReady.get();
+        if (webSocketReady.get() == ready) {
+            log.warn(String.format("WebSocket state unchanged: %s", ready));
+        } else {
+            log.info(String.format("WebSocket state changed: %s", ready));
+            if (callback != null)
+                callback.notifyWebsocketStateChanged(ready);
         }
-        isReady.set(ready);
-        log.info(String.format("WebSocket ready state changed: %s", ready));
-        if (callback != null)
-            callback.notifyWebsocketStateChanged(ready);
     }
 
     public void setCallback(WebSocketCallback callback) {
@@ -209,28 +212,34 @@ public class WebSocketService extends WebSocketClient {
                         ListenKey: %s
                         IsOpen: %s
                         IsReady: %s
+                        orderBookReady: %s
                         """,
-                symbol, listenKey, this.isOpen(), this.isReady()));
+                symbol, listenKey, this.isOpen(), streamsConnected.get(), orderBookReady.get()));
     }
 
-    public static int reconnectsCount = 0;
-    private void fakeDisconnect() {
-        long openTime = System.currentTimeMillis() - fakeOpenTime;
-        if (openTime > -30L + reconnectsCount * 5L && openTime < reconnectsCount * 5L) {
-            if (!isReady())
-                return;
-            log.info("Simulating lost WebSocket connection...");
-            this.setReady(false);
-            long rerunTaskDelay = new Random().nextLong(1_000L, 180_000L);
-            log.info("Reconnect on " + TimeFormatter.format(System.currentTimeMillis() + rerunTaskDelay));
-            taskManager.schedule("reset_ws_ready_state", () -> {
-                this.setReady(true);
-                log.info("Connection recovered back " + reconnectsCount++);
-                if (System.currentTimeMillis() > fakeOpenTime) {
-                    fakeOpenTime = System.currentTimeMillis() + 30_000L;
-                    log.info("Updating next open position time to " + TimeFormatter.format(fakeOpenTime));
-                }
-            }, rerunTaskDelay, TimeUnit.MILLISECONDS);
-        }
-    }
+//    public static int reconnectsCount = 0;
+//    private void fakeDisconnect() {
+//        long openTime = System.currentTimeMillis() - fakeOpenTime;
+//        if (openTime > -15L + reconnectsCount * 10L && openTime < reconnectsCount * 10L) {
+//            if (!streamsConnected.get())
+//                return;
+//            log.info("Simulating lost WebSocket connection...");
+//            streamsConnected.set(false);
+//            updateReadyState();
+//
+//            long rerunTaskDelay = new Random().nextLong(1_000L, 180_000L);
+//            log.info("Reconnect on " + TimeFormatter.format(System.currentTimeMillis() + rerunTaskDelay));
+//            taskManager.schedule("reset_ws_ready_state", () -> {
+//
+//                streamsConnected.set(true);
+//                updateReadyState();
+//
+//                log.info("Connection recovered back " + reconnectsCount++);
+//                if (System.currentTimeMillis() > fakeOpenTime) {
+//                    fakeOpenTime = System.currentTimeMillis() + 30_000L;
+//                    log.info("Updating next open position time to " + TimeFormatter.format(fakeOpenTime));
+//                }
+//            }, rerunTaskDelay, TimeUnit.MILLISECONDS);
+//        }
+//    }
 }

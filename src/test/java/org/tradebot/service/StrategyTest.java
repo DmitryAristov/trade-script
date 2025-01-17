@@ -44,6 +44,7 @@ class StrategyTest {
     @Test
     void testNotifyImbalanceStateUpdateWithWebSocketReady() {
         // Mock WebSocket state
+        when(orderManager.getLock()).thenReturn(new Object());
         strategy.notifyWebsocketStateChanged(true);
 
         Imbalance imbalance = mock(Imbalance.class);
@@ -62,12 +63,11 @@ class StrategyTest {
         Imbalance imbalance = mock(Imbalance.class);
 
         strategy.notifyImbalanceStateUpdate(1000L, ImbalanceService.State.POTENTIAL_END_POINT, imbalance);
-
-        assertEquals(System.currentTimeMillis() + 30_000L, ImbalanceService.fakeOpenTime, 1000L);
     }
 
     @Test
     void testNotifyWebSocketStateChangedToReady() {
+        when(orderManager.getLock()).thenReturn(new Object());
         strategy.notifyWebsocketStateChanged(false);
 
         strategy.notifyWebsocketStateChanged(true);
@@ -77,6 +77,7 @@ class StrategyTest {
 
     @Test
     void testNotifyWebSocketStateChangedToNotReady() {
+        strategy.websocketState.set(true);
         strategy.notifyWebsocketStateChanged(false);
 
         verify(taskManager).scheduleAtFixedRate(
@@ -106,6 +107,7 @@ class StrategyTest {
     void testNotifyOrderUpdate() {
         String clientId = "test_order_id";
         String status = "FILLED";
+        strategy.websocketState.set(true);
 
         strategy.notifyOrderUpdate(clientId, status);
 

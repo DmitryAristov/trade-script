@@ -57,13 +57,13 @@ class WebSocketServiceTest {
         verify(webSocketService, times(1)).send(eq("{\"method\": \"SUBSCRIBE\", \"params\": [\"btcusdt@trade\"], \"id\": 1}"));
         verify(webSocketService, times(1)).send(eq("{\"method\": \"SUBSCRIBE\", \"params\": [\"btcusdt@depth@100ms\"], \"id\": 2}"));
         verify(webSocketService, times(1)).send(eq("{\"method\": \"SUBSCRIBE\", \"params\": [\"mockListenKey\"], \"id\": 3}"));
-        assertTrue(webSocketService.isReady());
+        assertTrue(webSocketService.streamsConnected.get());
     }
 
     @Test
     void testOnMessage_TradeEvent() {
         JSONObject message = new JSONObject().put("e", "trade");
-        when(webSocketService.isReady()).thenReturn(true);
+        webSocketService.streamsConnected.set(true);
         webSocketService.onMessage(message.toString());
         verify(tradeHandler).onMessage(
                 argThat(argument -> argument.getString("e").equals("trade"))
@@ -73,7 +73,7 @@ class WebSocketServiceTest {
     @Test
     void testOnMessage_DepthUpdateEvent() {
         JSONObject message = new JSONObject().put("e", "depthUpdate");
-        when(webSocketService.isReady()).thenReturn(true);
+        webSocketService.streamsConnected.set(true);
         webSocketService.onMessage(message.toString());
         verify(orderBookHandler).onMessage(
                 argThat(argument -> argument.getString("e").equals("depthUpdate"))
@@ -83,7 +83,7 @@ class WebSocketServiceTest {
     @Test
     void testOnMessage_UserDataEvent() {
         JSONObject message = new JSONObject().put("e", "ORDER_TRADE_UPDATE");
-        when(webSocketService.isReady()).thenReturn(true);
+        webSocketService.streamsConnected.set(true);
         webSocketService.onMessage(message.toString());
         verify(userDataHandler).onMessage(
                 eq("ORDER_TRADE_UPDATE"),
@@ -94,7 +94,7 @@ class WebSocketServiceTest {
     void testOnMessage_otherEvent() {
         JSONObject message = new JSONObject();
         message.put("e", "someEvent");
-        when(webSocketService.isReady()).thenReturn(true);
+        webSocketService.streamsConnected.set(true);
         webSocketService.onMessage(message.toString());
         verify(userDataHandler).onMessage(
                 eq("someEvent"),
@@ -105,13 +105,13 @@ class WebSocketServiceTest {
     void testOnClose() {
         webSocketService.onClose(1000, "Normal closure", true);
 
-        assertFalse(webSocketService.isReady());
+        assertFalse(webSocketService.streamsConnected.get());
     }
 
     @Test
     @Disabled
     void testReconnectWebSocket_withUserStream() throws InterruptedException {
-        when(webSocketService.isReady()).thenReturn(true);
+        webSocketService.streamsConnected.set(true);
 
         webSocketService.reconnectWebSocket();
 
@@ -125,7 +125,7 @@ class WebSocketServiceTest {
 
     @Test
     void testStopService() {
-        when(webSocketService.isReady()).thenReturn(true);
+        webSocketService.streamsConnected.set(true);
         when(apiService.getUserStreamKey()).thenReturn(HTTPResponse.success(200, "mockListenKey"));
         webSocketService.connectUserDataStream();
 
@@ -137,12 +137,12 @@ class WebSocketServiceTest {
         verify(taskManager, times(1)).cancel("user_data_stream_ping");
         verify(apiService, times(1)).removeUserStreamKey();
         verify(webSocketService, times(1)).close();
-        assertFalse(webSocketService.isReady.get());
+        assertFalse(webSocketService.streamsConnected.get());
     }
 
     @Test
     void testConnectUserDataStream_enable() {
-        when(webSocketService.isReady()).thenReturn(true);
+        webSocketService.streamsConnected.set(true);
         when(apiService.getUserStreamKey()).thenReturn(HTTPResponse.success(200, "mockListenKey"));
 
         webSocketService.connectUserDataStream();
@@ -154,7 +154,7 @@ class WebSocketServiceTest {
 
     @Test
     void testConnectUserDataStream_disableWhenWsIsNotReady() {
-        when(webSocketService.isReady()).thenReturn(false);
+        webSocketService.streamsConnected.set(false);
 
         webSocketService.disconnectUserDataStream();
 

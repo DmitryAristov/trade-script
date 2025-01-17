@@ -45,25 +45,25 @@ class TradeHandlerTest {
     }
 
     @Test
-    void testUpdateMarketData_ProcessValidData() {
+    void testUpdateMarketData_ProcessValidPrice() {
         JSONObject trade1 = new JSONObject().put("p", "100.5").put("q", "10.0");
         JSONObject trade2 = new JSONObject().put("p", "200.5").put("q", "20.0");
         tradeHandler.activeQueue.add(trade1);
         tradeHandler.activeQueue.add(trade2);
         doNothing().when(callback).notifyNewMarketEntry(anyLong(), any());
         tradeHandler.setCallback(callback);
-        tradeHandler.updateMarketData();
+        tradeHandler.updateMarketPrice();
         verify(callback).notifyNewMarketEntry(anyLong(), any(MarketEntry.class));
         assertTrue(tradeHandler.processingQueue.isEmpty());
     }
 
     @Test
-    void testUpdateMarketData_EmptyQueue() {
+    void testUpdateMarketPrice_EmptyQueue() {
         tradeHandler.lastPrice = 150.0;
         tradeHandler.activeQueue.clear();
         doNothing().when(callback).notifyNewMarketEntry(anyLong(), any());
         tradeHandler.setCallback(callback);
-        tradeHandler.updateMarketData();
+        tradeHandler.updateMarketPrice();
         verify(callback).notifyNewMarketEntry(anyLong(), any(MarketEntry.class));
     }
 

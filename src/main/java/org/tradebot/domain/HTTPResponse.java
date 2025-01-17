@@ -41,11 +41,11 @@ public class HTTPResponse<T, E> {
         return code;
     }
 
-    public T getSuccessResponse() {
+    public T getResponse() {
         if (this.isSuccess()) {
             return this.value;
         } else {
-            throw new RuntimeException((String) this.error);
+            throw new RuntimeException(this.error.toString());
         }
     }
 }

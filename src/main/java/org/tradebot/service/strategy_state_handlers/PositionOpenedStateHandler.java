@@ -74,7 +74,7 @@ public class PositionOpenedStateHandler implements StateHandler {
         log.debug(String.format("Position: %s", position));
 
         log.info("Closing position and resetting state...");
-        orderManager.close(position);
+        orderManager.closePosition();
         orderManager.resetToEmptyPosition();
         log.info("State reset to EMPTY_POSITION.");
     }

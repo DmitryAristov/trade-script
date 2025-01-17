@@ -4,6 +4,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import org.tradebot.domain.OrderBook;
 import org.tradebot.listener.OrderBookCallback;
+import org.tradebot.listener.ReadyStateCallback;
 import org.tradebot.service.TaskManager;
 import org.tradebot.util.Log;
 
@@ -26,6 +27,7 @@ public class OrderBookHandler {
     protected final Map<Double, Double> asks = new ConcurrentHashMap<>();
     protected final TreeMap<Long, JSONObject> initializationMessagesQueue = new TreeMap<>();
     protected OrderBookCallback callback;
+    protected ReadyStateCallback readyCallback;
 
     private long depthEndpointLockTimeMills = -1;
     protected long orderBookLastUpdateId = -1;
@@ -61,6 +63,7 @@ public class OrderBookHandler {
         } else {
             log.warn("Order book out of sync. Reinitialization required.");
             isOrderBookInitialized = false;
+            readyCallback.notifyReadyStateUpdate(false);
         }
     }
 
@@ -76,9 +79,9 @@ public class OrderBookHandler {
         log.info(String.format("Message added to initialization queue (size: %d).", initializationMessagesQueue.size()));
 
         OrderBook snapshot = null;
-        if (initializationMessagesQueue.size() <= 10) {
-            snapshot = apiService.getOrderBookPublicAPI(symbol).getSuccessResponse();
-        } else if (initializationMessagesQueue.size() > 25) {
+        if (initializationMessagesQueue.size() < 6) {
+            snapshot = apiService.getOrderBookPublicAPI(symbol).getResponse();
+        } else if (initializationMessagesQueue.size() > 11) {
             initializationMessagesQueue.clear();
             log.warn("Initialization queue exceeded maximum size. Clearing and retrying...");
             return;
@@ -110,6 +113,7 @@ public class OrderBookHandler {
                     .filter(entry -> entry.getKey() >= orderBookLastUpdateId)
                     .forEach(entry -> updateOrderBook(entry.getKey(), entry.getValue()));
             isOrderBookInitialized = true;
+            readyCallback.notifyReadyStateUpdate(true);
             log.info("Order book successfully initialized.");
         }
     }
@@ -149,6 +153,10 @@ public class OrderBookHandler {
         log.info(String.format("Callback set: %s", callback.getClass().getName()));
     }
 
+    public void setReadyCallback(ReadyStateCallback readyCallback) {
+        this.readyCallback = readyCallback;
+    }
+
     private void logOrderBookUpdate() {
         Map<Double, Double> asksTmpMap = new TreeMap<>(asks);
         Map<Double, Double> bidsTmpMap = new TreeMap<>(bids).descendingMap();
@@ -169,6 +177,7 @@ public class OrderBookHandler {
         log.debug(String.format("""
                         symbol: %s
                         callback: %s
+                        readyCallback: %s
                         bids: %s
                         asks: %s
                         depthEndpointLockTimeMills: %d
@@ -178,6 +187,7 @@ public class OrderBookHandler {
                         """,
                 symbol,
                 callback,
+                readyCallback,
                 bids,
                 asks,
                 depthEndpointLockTimeMills,

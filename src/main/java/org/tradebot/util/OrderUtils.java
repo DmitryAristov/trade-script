@@ -84,7 +84,7 @@ public class OrderUtils {
         Order breakEven = new Order();
         breakEven.setSymbol(symbol);
         breakEven.setType(Order.Type.STOP_MARKET);
-        breakEven.setStopPrice(position.getEntryPrice());
+        breakEven.setStopPrice(position.getBreakEvenPrice());
         breakEven.setClosePosition(true);
         breakEven.setSide(switch (position.getType()) {
             case SHORT -> Order.Side.BUY;
@@ -96,15 +96,10 @@ public class OrderUtils {
         return breakEven;
     }
 
-    public Order createClosePositionOrder(String symbol, Position position, String clientId) {
+    public Order createClosePositionOrder(String symbol, String clientId) {
         Order close = new Order();
         close.setSymbol(symbol);
         close.setType(Order.Type.MARKET);
-        close.setSide(switch (position.getType()) {
-            case SHORT -> Order.Side.BUY;
-            case LONG -> Order.Side.SELL;
-        });
-        close.setQuantity(Math.abs(position.getPositionAmt()));
         close.setReduceOnly(true);
         close.setCreateTime(System.currentTimeMillis());
         close.setNewClientOrderId(clientId);

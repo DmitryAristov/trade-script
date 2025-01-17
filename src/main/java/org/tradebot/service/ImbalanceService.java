@@ -16,7 +16,6 @@ import java.util.NavigableMap;
 import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
-import java.util.Random;
 import java.util.Map;
 
 public class ImbalanceService implements VolatilityCallback, MarketDataCallback {
@@ -59,8 +58,6 @@ public class ImbalanceService implements VolatilityCallback, MarketDataCallback 
 
 
     public ImbalanceService() {
-        log.info("Initial open position time: " + TimeFormatter.format(fakeOpenTime));
-
         log.info(String.format("""
                         ImbalanceService initialized with parameters:
                             complete time modificator :: %.3f
@@ -95,15 +92,19 @@ public class ImbalanceService implements VolatilityCallback, MarketDataCallback 
     public void notifyNewMarketEntry(long currentTime, MarketEntry currentEntry) {
         updateData(currentTime, currentEntry);
 
-        switch (currentState) {
-            case WAIT -> handleWaitState(currentTime, currentEntry);
-            case PROGRESS -> trackImbalanceProgress(currentTime, currentEntry);
-            case POTENTIAL_END_POINT -> evaluatePossibleEndPoint(currentTime, currentEntry);
-            case COMPLETED -> saveCompletedImbalanceAndResetState();
+        try {
+            switch (currentState) {
+                case WAIT -> handleWaitState(currentTime, currentEntry);
+                case PROGRESS -> trackImbalanceProgress(currentTime, currentEntry);
+                case POTENTIAL_END_POINT -> evaluatePossibleEndPoint(currentTime, currentEntry);
+                case COMPLETED -> saveCompletedImbalanceAndResetState();
+            }
+        } catch (Exception e) {
+            log.error("Failed to handle market price update", e);
         }
     }
 
-    public static long fakeOpenTime = System.currentTimeMillis() + 2 * 60_000L;
+//    public static long fakeOpenTime = System.currentTimeMillis() + 2 * 60_000L;
     /**
      * Идем по секундным данным со свежих назад.
      * Находим первый имбаланс.
@@ -112,33 +113,30 @@ public class ImbalanceService implements VolatilityCallback, MarketDataCallback 
      * Потом из них находим с самой большой скоростью изменения цены.
      */
     private void handleWaitState(long currentTime, MarketEntry currentEntry) {
-        // start generation random entry points
-        long openTime = System.currentTimeMillis() - fakeOpenTime;
-
-        if (openTime > -50L && openTime < 50L) {
-            log.info("Simulating potential entry point at " + TimeFormatter.format(fakeOpenTime));
-            double imbalanceSize = new Random().nextDouble(500., 3000.);
-            double imbalanceStartPrice = currentEntry.low() + imbalanceSize;
-            double imbalanceEndPrice = currentEntry.low() - new Random().nextDouble(10., imbalanceSize * MAX_VALID_IMBALANCE_PART);
-            long imbalanceEndTime = currentTime - new Random().nextLong(MIN_POTENTIAL_COMPLETE_TIME, 10000L);
-            long imbalanceStartTime = new Random().nextLong(MIN_IMBALANCE_TIME_DURATION, Math.round(imbalanceEndTime - imbalanceSize / speedThreshold));
-
-            currentImbalance = new Imbalance(imbalanceStartTime, imbalanceStartPrice, imbalanceEndTime, imbalanceEndPrice, Imbalance.Type.DOWN);
-            currentState = State.POTENTIAL_END_POINT;
-
-            log.info(String.format(currentImbalance.getType() + " detected: %s", currentImbalance));
-            log.debug(currentImbalance.toString());
-            if (callback != null)
-                callback.notifyImbalanceStateUpdate(currentTime, currentState, currentImbalance);
-            return;
-        }
-        if (fakeOpenTime > 0) {
-            return;
-        }
-        // end generation random entry points
-
-
-
+//        // start generation random entry points
+//        long openTime = System.currentTimeMillis() - fakeOpenTime;
+//
+//        if (openTime > -50L && openTime < 50L) {
+//            log.info("Simulating potential entry point at " + TimeFormatter.format(fakeOpenTime));
+//            double imbalanceSize = new Random().nextDouble(500., 3000.);
+//            double imbalanceStartPrice = currentEntry.low() + imbalanceSize;
+//            double imbalanceEndPrice = currentEntry.low() - new Random().nextDouble(10., imbalanceSize * MAX_VALID_IMBALANCE_PART);
+//            long imbalanceEndTime = currentTime - new Random().nextLong(MIN_POTENTIAL_COMPLETE_TIME, 10000L);
+//            long imbalanceStartTime = new Random().nextLong(MIN_IMBALANCE_TIME_DURATION, Math.round(imbalanceEndTime - imbalanceSize / speedThreshold));
+//
+//            currentImbalance = new Imbalance(imbalanceStartTime, imbalanceStartPrice, imbalanceEndTime, imbalanceEndPrice, Imbalance.Type.DOWN);
+//            currentState = State.POTENTIAL_END_POINT;
+//
+//            log.info(String.format(currentImbalance.getType() + " detected: %s", currentImbalance));
+//            log.debug(currentImbalance.toString());
+//            if (callback != null)
+//                callback.notifyImbalanceStateUpdate(currentTime, currentState, currentImbalance);
+//            return;
+//        }
+//        if (fakeOpenTime > 0) {
+//            return;
+//        }
+//        // end generation random entry points
 
         log.debug("Looking for imbalance...");
         Imbalance detectedImbalance = findImbalance(currentTime, currentEntry);
@@ -365,13 +363,13 @@ public class ImbalanceService implements VolatilityCallback, MarketDataCallback 
     }
 
     private void evaluatePossibleEndPoint(long currentTime, MarketEntry currentEntry) {
-        currentState = State.COMPLETED;
-        log.info("Simulation imbalance is completed");
-
-//        if (checkProgressCondition(currentTime, currentEntry)) {
-//            return;
-//        }
-//        checkCompleteCondition(currentTime);
+//        currentState = State.COMPLETED;
+//        log.info("Simulation imbalance is completed");
+//
+        if (checkProgressCondition(currentTime, currentEntry)) {
+            return;
+        }
+        checkCompleteCondition(currentTime);
     }
 
     private void updateData(long currentTime, MarketEntry currentEntry) {

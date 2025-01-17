@@ -37,8 +37,7 @@ public class UserDataHandler {
                     Position position = new Position();
                     position.setPositionAmt(Double.parseDouble(positionUpdate.getString("pa")));
                     position.setEntryPrice(Double.parseDouble(positionUpdate.getString("ep")));
-                    if (position.getEntryPrice() == 0 || position.getPositionAmt() == 0)
-                        position = null;
+                    position.setBreakEvenPrice(Double.parseDouble(positionUpdate.getString("bep")));
 
                     if (callback != null)
                         callback.notifyPositionUpdate(position);

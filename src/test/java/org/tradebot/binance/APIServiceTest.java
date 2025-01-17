@@ -49,7 +49,7 @@ class APIServiceTest {
         String orderJsonStr = readFile("order.json");
         when(httpClient.sendRequest(anyString(), anyString(), anyMap(), anyBoolean())).thenReturn(HTTPResponse.success(200,orderJsonStr));
 
-        Order result = apiService.placeOrder(order).getSuccessResponse();
+        Order result = apiService.placeOrder(order).getResponse();
 
         assertEquals(123L, result.getId());
         assertEquals("BTCUSDT", result.getSymbol());
@@ -78,7 +78,7 @@ class APIServiceTest {
         String orderJsonStr = readFile("order.json");
         when(httpClient.sendRequest(anyString(), anyString(), anyMap(), anyBoolean())).thenReturn(HTTPResponse.success(200,orderJsonStr));
 
-        Order result = apiService.placeOrder(order).getSuccessResponse();
+        Order result = apiService.placeOrder(order).getResponse();
 
         assertEquals(123L, result.getId());
         assertEquals("BTCUSDT", result.getSymbol());
@@ -103,14 +103,14 @@ class APIServiceTest {
     @Test
     void testGetLeverage() {
         when(httpClient.sendRequest(anyString(), anyString(), anyMap())).thenReturn(HTTPResponse.success(200,"[{\"leverage\": \"10\"}]"));
-        int leverage = apiService.getLeverage("BTCUSDT").getSuccessResponse();
+        int leverage = apiService.getLeverage("BTCUSDT").getResponse();
         assertEquals(10, leverage);
     }
 
     @Test
     void testGetLeverage_zeroLeverage() {
         when(httpClient.sendRequest(anyString(), anyString(), anyMap())).thenReturn(HTTPResponse.success(200,"[]"));
-        Integer leverage = apiService.getLeverage("BTCUSDT").getSuccessResponse();
+        Integer leverage = apiService.getLeverage("BTCUSDT").getResponse();
         assertNull(leverage);
     }
 
@@ -118,7 +118,7 @@ class APIServiceTest {
     void testGetAccountBalance() {
         when(httpClient.sendRequest(anyString(), anyString(), anyMap()))
                 .thenReturn(HTTPResponse.success(200,String.format("[{\"asset\": \"%s\", \"availableBalance\": \"100.5\"}]", BASE_ASSET)));
-        double balance = apiService.getAccountBalance().getSuccessResponse();
+        double balance = apiService.getAccountBalance().getResponse();
         assertEquals(100.5 * RISK_LEVEL, balance);
     }
 
@@ -126,7 +126,7 @@ class APIServiceTest {
     void testGetAccountBalance_zeroBalance() {
         when(httpClient.sendRequest(anyString(), anyString(), anyMap()))
                 .thenReturn(HTTPResponse.success(200,"[{\"asset\": \"BNB\", \"availableBalance\": \"100.5\"}]"));
-        double balance = apiService.getAccountBalance().getSuccessResponse();
+        double balance = apiService.getAccountBalance().getResponse();
         assertEquals(0, balance);
     }
 
@@ -134,7 +134,7 @@ class APIServiceTest {
     void testGetAccountInfo() {
         when(httpClient.sendRequest(anyString(), anyString(), anyMap()))
                 .thenReturn(HTTPResponse.success(200,"{\"canTrade\":true,\"totalWalletBalance\":\"150.75\"}"));
-        AccountInfo accountInfo = apiService.getAccountInfo().getSuccessResponse();
+        AccountInfo accountInfo = apiService.getAccountInfo().getResponse();
         assertTrue(accountInfo.canTrade());
         assertEquals(150.75, accountInfo.availableBalance());
     }
@@ -143,7 +143,7 @@ class APIServiceTest {
     void testGetUserStreamKey() {
         when(httpClient.sendRequest(anyString(), anyString(), anyMap()))
                 .thenReturn(HTTPResponse.success(200,"{\"listenKey\":\"testListenKey123\"}"));
-        String streamKey = apiService.getUserStreamKey().getSuccessResponse();
+        String streamKey = apiService.getUserStreamKey().getResponse();
         assertEquals("testListenKey123", streamKey);
     }
 
@@ -164,34 +164,35 @@ class APIServiceTest {
     @Test
     void testGetOpenPosition() {
         when(httpClient.sendRequest(anyString(), anyString(), anyMap()))
-                .thenReturn(HTTPResponse.success(200,"[{\"entryPrice\": \"100.5\", \"positionAmt\": \"10.0\"}]"));
-        Position position = apiService.getOpenPosition("BTCUSDT").getSuccessResponse();
+                .thenReturn(HTTPResponse.success(200,"[{\"entryPrice\": \"100.5\", \"positionAmt\": \"10.0\", \"breakEvenPrice\": \"110.0\"}]"));
+        Position position = apiService.getOpenPosition("BTCUSDT").getResponse();
         assertNotNull(position);
         assertEquals(100.5, position.getEntryPrice());
         assertEquals(10.0, position.getPositionAmt());
+        assertEquals(110.0, position.getBreakEvenPrice());
     }
 
     @Test
     void testGetOpenPosition_emptyList() {
         when(httpClient.sendRequest(anyString(), anyString(), anyMap())).thenReturn(HTTPResponse.success(200,"[]"));
-        Position position = apiService.getOpenPosition("BTCUSDT").getSuccessResponse();
+        Position position = apiService.getOpenPosition("BTCUSDT").getResponse();
         assertNull(position);
     }
 
     @Test
     void testGetOpenPosition_emptyPosition() {
         when(httpClient.sendRequest(anyString(), anyString(), anyMap()))
-                .thenReturn(HTTPResponse.success(200,"[{\"entryPrice\": \"0\", \"positionAmt\": \"0\"}]"));
-        Position position = apiService.getOpenPosition("BTCUSDT").getSuccessResponse();
+                .thenReturn(HTTPResponse.success(200,"[{\"entryPrice\": \"0\", \"positionAmt\": \"0\", \"breakEvenPrice\": \"0\"}]"));
+        Position position = apiService.getOpenPosition("BTCUSDT").getResponse();
         assertNull(position);
     }
 
     @Test
     void testGetMarketDataPublicAPI() {
-        when(httpClient.sendPublicRequest(anyString()))
+        when(httpClient.sendPublicRequest(anyString(), anyString(), anyMap()))
                 .thenReturn(HTTPResponse.success(200,
                         "[[6288335309618,\"\",\"93000\",\"92000\",\"\",\"30\"]]"));
-        TreeMap<Long, MarketEntry> marketData = apiService.getMarketDataPublicAPI("BTCUSDT", "1m", 1).getSuccessResponse();
+        TreeMap<Long, MarketEntry> marketData = apiService.getMarketDataPublicAPI("BTCUSDT", "1m", 1).getResponse();
         assertEquals(1, marketData.size());
         MarketEntry entry = marketData.firstEntry().getValue();
         assertEquals(93000, entry.high());
@@ -202,10 +203,11 @@ class APIServiceTest {
 
     @Test
     void testParseOrderBookPublicAPI() {
-        when(httpClient.sendPublicRequest(anyString())).thenReturn(HTTPResponse.success(200,
+        when(httpClient.sendPublicRequest(anyString(), anyString(), anyMap()))
+                .thenReturn(HTTPResponse.success(200,
                 "{\"lastUpdateId\": 6288335309618,\"bids\":[[\"90000\",\"4.2\"]],\"asks\":[[\"91000\",\"3.5\"]]}"));
 
-        OrderBook orderBook = apiService.getOrderBookPublicAPI("BTCUSDT").getSuccessResponse();
+        OrderBook orderBook = apiService.getOrderBookPublicAPI("BTCUSDT").getResponse();
 
         assertEquals(6288335309618L, orderBook.lastUpdateId());
         assertEquals(1, orderBook.asks().size());

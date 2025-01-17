@@ -89,7 +89,7 @@ public class VolatilityService {
     private TreeMap<Long, MarketEntry> fetchMarketData(String interval, int days) {
         int requiredEntries = days * 24 * 60 / 15;
         log.debug(String.format("Fetching market data for symbol: %s, interval: %s, required entries: %d", symbol, interval, requiredEntries));
-        TreeMap<Long, MarketEntry> marketData = apiService.getMarketDataPublicAPI(symbol, interval, requiredEntries).getSuccessResponse();
+        TreeMap<Long, MarketEntry> marketData = apiService.getMarketDataPublicAPI(symbol, interval, requiredEntries).getResponse();
         log.debug(String.format("Fetched %d market entries.", marketData.size()));
         return marketData;
     }

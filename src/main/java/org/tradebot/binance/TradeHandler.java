@@ -30,7 +30,7 @@ public class TradeHandler {
 
     public void scheduleTasks() {
         log.info("Setting up Market Data update task...");
-        this.taskManager.scheduleAtFixedRate(MARKET_DATA_UPDATE_TASK_KEY, this::updateMarketData,
+        this.taskManager.scheduleAtFixedRate(MARKET_DATA_UPDATE_TASK_KEY, this::updateMarketPrice,
                 1000 - System.currentTimeMillis() % 1000, 100, TimeUnit.MILLISECONDS);
         log.info("Market Data update task scheduled");
     }
@@ -44,43 +44,37 @@ public class TradeHandler {
         }
     }
 
-    protected void updateMarketData() {
-        try {
-            //TODO: how can we move to binance time?
-            long openTime = System.currentTimeMillis();
-            Deque<JSONObject> tempQueue;
-            synchronized (activeQueue) {
-                tempQueue = activeQueue;
-                activeQueue = processingQueue;
-                processingQueue = tempQueue;
-            }
-
-            double minPrice = Double.MAX_VALUE;
-            double maxPrice = Double.MIN_VALUE;
-            double volume = 0;
-
-            for (JSONObject trade : processingQueue) {
-                double price = Double.parseDouble(trade.getString("p"));
-                if (price > 0) {
-                    minPrice = Math.min(minPrice, price);
-                    maxPrice = Math.max(maxPrice, price);
-                    volume += Double.parseDouble(trade.getString("q"));
-                }
-            }
-            processingQueue.clear();
-
-            MarketEntry entry = processEntry(minPrice, maxPrice, volume);
-            if (entry == null) {
-                return;
-            }
-//            Log.removeLines(1, Log.MARKET_DATA_LOGS_PATH);
-            log.debug("entry :: " + entry);
-
-            if (callback != null)
-                callback.notifyNewMarketEntry(openTime, entry);
-        } catch (Exception e) {
-            log.error("failed to update market data", e);
+    protected void updateMarketPrice() {
+        long openTime = System.currentTimeMillis();
+        Deque<JSONObject> tempQueue;
+        synchronized (activeQueue) {
+            tempQueue = activeQueue;
+            activeQueue = processingQueue;
+            processingQueue = tempQueue;
         }
+
+        double minPrice = Double.MAX_VALUE;
+        double maxPrice = Double.MIN_VALUE;
+        double volume = 0;
+
+        for (JSONObject trade : processingQueue) {
+            double price = Double.parseDouble(trade.getString("p"));
+            if (price > 0) {
+                minPrice = Math.min(minPrice, price);
+                maxPrice = Math.max(maxPrice, price);
+                volume += Double.parseDouble(trade.getString("q"));
+            }
+        }
+        processingQueue.clear();
+
+        MarketEntry entry = processEntry(minPrice, maxPrice, volume);
+        if (entry == null) {
+            return;
+        }
+//            Log.removeLines(1, Log.MARKET_DATA_LOGS_PATH);
+        log.debug("entry :: " + entry);
+        if (callback != null)
+            callback.notifyNewMarketEntry(openTime, entry);
     }
 
     protected MarketEntry processEntry(double minPrice, double maxPrice, double volume) {

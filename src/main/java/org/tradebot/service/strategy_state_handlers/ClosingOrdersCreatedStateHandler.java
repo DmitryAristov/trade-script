@@ -39,7 +39,7 @@ public class ClosingOrdersCreatedStateHandler implements StateHandler {
                 log.debug(String.format("Local orders: %s", orderManager.getOrders()));
                 log.debug(String.format("Actual opened orders: %s", openedOrders));
                 log.info("Closing position and resetting state.");
-                orderManager.close(position);
+                orderManager.closePosition();
                 orderManager.resetToEmptyPosition();
             } else {
                 log.info("Waiting for position to close...");
@@ -79,7 +79,7 @@ public class ClosingOrdersCreatedStateHandler implements StateHandler {
                     .findFirst();
             if (take0Opt.isEmpty()) {
                 log.info("First take order not found in opened orders. Querying order status...");
-                Order firstTake = apiService.queryOrder(symbol, orderManager.getOrders().get(OrderType.TAKE_0)).getSuccessResponse();
+                Order firstTake = apiService.queryOrder(symbol, orderManager.getOrders().get(OrderType.TAKE_0)).getResponse();
                 log.info(String.format("First take order status: %s", firstTake.getStatus()));
 
                 return handleTake0OrderStatus(firstTake, position);

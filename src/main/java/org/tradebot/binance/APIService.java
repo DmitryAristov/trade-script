@@ -9,10 +9,9 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.List;
 
-import static org.tradebot.binance.HttpClient.BASE_URL;
 import static org.tradebot.util.JsonParser.*;
 
-//TODO 429 error, unit tests
+//TODO 429 error
 public class APIService {
 
     private final Log log = new Log();
@@ -86,7 +85,6 @@ public class APIService {
         Map<String, String> params = new HashMap<>();
         params.put("symbol", symbol);
         params.put("origClientOrderId", clientId);
-        params.put("recvWindow", "5000");
 
         httpClient.sendRequest("/fapi/v1/order", "DELETE", params);
     }
@@ -100,17 +98,13 @@ public class APIService {
         } else {
             params.put("origClientOrderId", String.valueOf(order.getNewClientOrderId()));
         }
-        params.put("recvWindow", "5000");
 
         httpClient.sendRequest("/fapi/v1/order", "DELETE", params);
     }
 
     public void cancelAllOpenOrders(String symbol) {
         Map<String, String> params = new HashMap<>();
-
         params.put("symbol", symbol);
-        params.put("recvWindow", "5000");
-
         httpClient.sendRequest("/fapi/v1/allOpenOrders", "DELETE", params);
     }
 
@@ -119,7 +113,6 @@ public class APIService {
 
         params.put("symbol", symbol);
         params.put("origClientOrderId", clientId);
-        params.put("recvWindow", "5000");
 
         HTTPResponse<String, APIError> response = httpClient.sendRequest("/fapi/v1/order", "GET", params);
         if (response.isSuccess()) {
@@ -138,7 +131,6 @@ public class APIService {
         } else {
             params.put("origClientOrderId", String.valueOf(order.getNewClientOrderId()));
         }
-        params.put("recvWindow", "5000");
 
         HTTPResponse<String, APIError> response = httpClient.sendRequest("/fapi/v1/order", "GET", params);
         if (response.isSuccess()) {
@@ -159,7 +151,6 @@ public class APIService {
     public HTTPResponse<Integer, APIError> getLeverage(String symbol) {
         Map<String, String> params = new HashMap<>();
         params.put("symbol", symbol);
-        params.put("recvWindow", "5000");
 
         HTTPResponse<String, APIError> response = httpClient.sendRequest("/fapi/v2/positionRisk", "GET", params);
         if (response.isSuccess()) {
@@ -170,10 +161,7 @@ public class APIService {
     }
 
     public HTTPResponse<Double, APIError> getAccountBalance() {
-        Map<String, String> params = new HashMap<>();
-        params.put("recvWindow", "5000");
-
-        HTTPResponse<String, APIError> response = httpClient.sendRequest("/fapi/v2/balance", "GET", params);
+        HTTPResponse<String, APIError> response = httpClient.sendRequest("/fapi/v2/balance", "GET", new HashMap<>());
         if (response.isSuccess()) {
             return HTTPResponse.success(response.getStatusCode(), parseBalance(response.getValue()));
         } else {
@@ -182,10 +170,7 @@ public class APIService {
     }
 
     public HTTPResponse<AccountInfo, APIError> getAccountInfo() {
-        Map<String, String> params = new HashMap<>();
-        params.put("recvWindow", "5000");
-
-        HTTPResponse<String, APIError> response = httpClient.sendRequest("/fapi/v2/account", "GET", params);
+        HTTPResponse<String, APIError> response = httpClient.sendRequest("/fapi/v2/account", "GET", new HashMap<>());
         if (response.isSuccess()) {
             return HTTPResponse.success(response.getStatusCode(), parseAccountInfo(response.getValue()));
         } else {
@@ -196,7 +181,6 @@ public class APIService {
     public HTTPResponse<Position, APIError> getOpenPosition(String symbol) {
         Map<String, String> params = new HashMap<>();
         params.put("symbol", symbol);
-        params.put("recvWindow", "5000");
 
         HTTPResponse<String, APIError> response = httpClient.sendRequest("/fapi/v3/positionRisk", "GET", params);
         if (response.isSuccess()) {
@@ -207,9 +191,7 @@ public class APIService {
     }
 
     public HTTPResponse<String, APIError> getUserStreamKey() {
-        Map<String, String> params = new HashMap<>();
-        params.put("timestamp", String.valueOf(System.currentTimeMillis()));
-        HTTPResponse<String, APIError> response = httpClient.sendRequest("/fapi/v1/listenKey", "POST", params);
+        HTTPResponse<String, APIError> response = httpClient.sendRequest("/fapi/v1/listenKey", "POST", new HashMap<>());
         if (response.isSuccess()) {
             return HTTPResponse.success(response.getStatusCode(), new JSONObject(response.getValue()).getString("listenKey"));
         } else {
@@ -218,19 +200,19 @@ public class APIService {
     }
 
     public void keepAliveUserStreamKey() {
-        Map<String, String> params = new HashMap<>();
-        params.put("timestamp", String.valueOf(System.currentTimeMillis()));
-        httpClient.sendRequest("/fapi/v1/listenKey", "PUT", params);
+        httpClient.sendRequest("/fapi/v1/listenKey", "PUT", new HashMap<>());
     }
 
     public void removeUserStreamKey() {
-        Map<String, String> params = new HashMap<>();
-        params.put("timestamp", String.valueOf(System.currentTimeMillis()));
-        httpClient.sendRequest("/fapi/v1/listenKey", "DELETE", params);
+        httpClient.sendRequest("/fapi/v1/listenKey", "DELETE", new HashMap<>());
     }
 
     public HTTPResponse<OrderBook, APIError> getOrderBookPublicAPI(String symbol) {
-        var response = httpClient.sendPublicRequest(String.format("%s/fapi/v1/depth?symbol=%s&limit=%d", BASE_URL, symbol, 50));
+        Map<String, String> params = new HashMap<>();
+        params.put("symbol", symbol);
+        params.put("limit", String.valueOf(50));
+
+        var response = httpClient.sendPublicRequest("/fapi/v1/depth", "GET", params);
         if (response.isSuccess()) {
             log.info("Fetched snapshot from API.");
             return HTTPResponse.success(response.getStatusCode(), parseOrderBook(response.getValue()));
@@ -240,8 +222,12 @@ public class APIService {
     }
 
     public HTTPResponse<TreeMap<Long, MarketEntry>, APIError> getMarketDataPublicAPI(String symbol, String interval, int limit) {
-        HTTPResponse<String, APIError> response = httpClient
-                .sendPublicRequest(String.format("%s/fapi/v1/klines?symbol=%s&limit=%d&interval=%s", BASE_URL, symbol, limit, interval));
+        Map<String, String> params = new HashMap<>();
+        params.put("symbol", symbol);
+        params.put("limit", String.valueOf(limit));
+        params.put("interval", String.valueOf(interval));
+
+        var response = httpClient.sendPublicRequest("/fapi/v1/klines", "GET", params);
         if (response.isSuccess()) {
             return HTTPResponse.success(response.getStatusCode(), parseResponseMarketData(response.getValue()));
         } else {
@@ -250,8 +236,7 @@ public class APIService {
     }
 
     public HTTPResponse<Precision, APIError> fetchSymbolPrecision(String symbol) {
-        HTTPResponse<String, APIError> response = httpClient
-                .sendPublicRequest(String.format("%s/fapi/v1/exchangeInfo", BASE_URL));
+        var response = httpClient.sendPublicRequest("/fapi/v1/exchangeInfo", "GET", new HashMap<>());
         if (response.isSuccess()) {
             Precision precision = parsePrecision(response.getValue(), symbol);
             if (precision == null)
@@ -265,12 +250,9 @@ public class APIService {
 
     public HTTPResponse<List<Order>, APIError> getOpenOrders(String symbol) {
         Map<String, String> params = new HashMap<>();
-        if (symbol != null) {
-            params.put("symbol", symbol.toUpperCase());
-        }
-        params.put("recvWindow", "5000");
-        HTTPResponse<String, APIError> response = httpClient.sendRequest("/fapi/v1/openOrders", "GET", params);
+        params.put("symbol", symbol.toUpperCase());
 
+        HTTPResponse<String, APIError> response = httpClient.sendRequest("/fapi/v1/openOrders", "GET", params);
         if (response.isSuccess()) {
             return HTTPResponse.success(response.getStatusCode(), parseOrders(response.getValue()));
         } else {
@@ -286,7 +268,6 @@ public class APIService {
         } else {
             params.put("origClientOrderId", String.valueOf(order.getNewClientOrderId()));
         }
-        params.put("recvWindow", "5000");
 
         HTTPResponse<String, APIError> response = httpClient.sendRequest("/fapi/v1/openOrder", "GET", params);
         if (response.isSuccess()) {
@@ -296,5 +277,12 @@ public class APIService {
         }
     }
 
-
+    public HTTPResponse<Long, APIError> getBinanceServerTime() {
+        HTTPResponse<String, APIError> response = httpClient.sendPublicRequest("/fapi/v1/time", "GET", new HashMap<>());
+        if (response.isSuccess()) {
+            return HTTPResponse.success(response.getStatusCode(), new JSONObject(response.getValue()).getLong("serverTime"));
+        } else {
+            return HTTPResponse.error(response.getStatusCode(), response.getError());
+        }
+    }
 }

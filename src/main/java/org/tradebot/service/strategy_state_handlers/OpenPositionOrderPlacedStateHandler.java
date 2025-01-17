@@ -90,7 +90,7 @@ public class OpenPositionOrderPlacedStateHandler implements StateHandler {
         }
 
         log.info(String.format("Querying open position order: %s", orderId));
-        return apiService.queryOrder(symbol, orderId).getSuccessResponse();
+        return apiService.queryOrder(symbol, orderId).getResponse();
     }
 
     private void resetToEmptyPosition(String reason) {
@@ -102,7 +102,7 @@ public class OpenPositionOrderPlacedStateHandler implements StateHandler {
     private void resetToEmptyPosition(String reason, Position position) {
         log.warn(reason);
         log.debug(String.format("Local orders: %s", orderManager.getOrders()));
-        orderManager.close(position);
+        orderManager.closePosition();
         orderManager.resetToEmptyPosition();
     }
 }
