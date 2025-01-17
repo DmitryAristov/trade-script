@@ -11,10 +11,10 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class JsonParser {
+import static org.tradebot.service.TradingBot.BASE_ASSET;
+import static org.tradebot.service.TradingBot.RISK_LEVEL;
 
-    public static final double RISK_LEVEL = 0.95;
-    public static final String BASE_ASSET = "BNFCR";
+public class JsonParser {
 
     public static OrderBook parseOrderBook(String response) {
         JSONObject snapshotJson = new JSONObject(response);
@@ -113,7 +113,7 @@ public class JsonParser {
                 result = Double.parseDouble(jsonArray.getJSONObject(i).getString("availableBalance"));
             }
         }
-        return result * RISK_LEVEL; // what part of account balance is for bot?
+        return result * RISK_LEVEL;
     }
 
     public static Integer parseLeverage(String value) {

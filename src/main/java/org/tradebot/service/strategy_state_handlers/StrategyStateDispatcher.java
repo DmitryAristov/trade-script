@@ -32,10 +32,10 @@ public class StrategyStateDispatcher {
 
     public void dispatch(Position position, List<Order> openedOrders) {
         Strategy.State currentState = orderManager.getState();
-        log.info(String.format("Dispatching handler for current state: %s", currentState));
 
         StateHandler handler = handlers.get(currentState);
         if (handler != null) {
+            log.info(String.format("Handling %s state...", currentState));
             handler.handle(position, openedOrders);
         } else {
             log.warn(String.format("No handler registered for state: %s. Skipping execution.", currentState));

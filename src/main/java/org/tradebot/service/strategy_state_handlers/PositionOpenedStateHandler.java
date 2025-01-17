@@ -28,7 +28,6 @@ public class PositionOpenedStateHandler implements StateHandler {
 
     @Override
     public void handle(Position position, List<Order> openedOrders) {
-        log.info("Handling POSITION_OPENED state...");
         if (position == null) {
             handleEmptyPosition(openedOrders);
         } else {
@@ -75,7 +74,6 @@ public class PositionOpenedStateHandler implements StateHandler {
 
         log.info("Closing position and resetting state...");
         orderManager.closePosition();
-        orderManager.resetToEmptyPosition();
         log.info("State reset to EMPTY_POSITION.");
     }
 

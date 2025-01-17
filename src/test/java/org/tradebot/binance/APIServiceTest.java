@@ -11,8 +11,8 @@ import java.util.TreeMap;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
-import static org.tradebot.util.JsonParser.BASE_ASSET;
-import static org.tradebot.util.JsonParser.RISK_LEVEL;
+import static org.tradebot.service.TradingBot.RISK_LEVEL;
+import static org.tradebot.service.TradingBot.BASE_ASSET;
 
 //TODO
 @SuppressWarnings("unchecked")

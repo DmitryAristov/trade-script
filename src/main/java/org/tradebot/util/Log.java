@@ -1,10 +1,12 @@
 package org.tradebot.util;
 
+import org.tradebot.service.TradingBot;
+
 import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.io.RandomAccessFile;
 import java.io.File;
+import java.io.RandomAccessFile;
 import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Date;
@@ -21,12 +23,11 @@ public class Log {
         ERROR
     }
 
-    public static final String LOGS_DIR_PATH = System.getProperty("user.dir") + "/src/main/resources/logs/";
+    public static final String LOGS_DIR_PATH = System.getProperty("user.dir") + "/output/logs/";
     private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd");
 
     static {
         ensureLogDirectoryExists();
-        resetLogFiles();
     }
 
     private String path = null;
@@ -80,6 +81,25 @@ public class Log {
                 ERROR);
     }
 
+    public void removeLines(int count) {
+        String dateSuffix = "_" + DATE_FORMAT.format(new Date()) + ".log";
+        try (RandomAccessFile file = new RandomAccessFile(LOGS_DIR_PATH + path + dateSuffix, "rw")) {
+            long length = file.length();
+            int linesCount = 0;
+
+            while (length > 0 && linesCount < count + 1) {
+                length--;
+                file.seek(length);
+                if (file.readByte() == '\n') {
+                    linesCount++;
+                }
+            }
+            file.setLength(length + 1);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
     private void log(String message, Level level) {
         log(message, level, -1);
     }
@@ -96,6 +116,9 @@ public class Log {
 
         if (level != DEBUG) {
             writeLogFile(logEntry, "info");
+        }
+        if (level == ERROR) {
+            TradingBot.getInstance().logAll();
         }
     }
 
@@ -120,48 +143,6 @@ public class Log {
         String methodName = stackTrace[i].getMethodName();
         String simpleClassName = fullClassName.substring(fullClassName.lastIndexOf('.') + 1);
         return simpleClassName + "." + methodName + " :::: ";
-    }
-
-    public static void resetLogFiles() {
-        File directory = new File(LOGS_DIR_PATH);
-        if (!directory.isDirectory()) {
-            return;
-        }
-
-        File[] files = directory.listFiles();
-        if (files == null) {
-            return;
-        }
-
-        for (File file : files) {
-            if (file.isFile()) {
-                resetLogFile(file.getAbsolutePath());
-            }
-        }
-    }
-
-    public static void resetLogFile(String path) {
-        try (RandomAccessFile file = new RandomAccessFile(path, "rw")) {
-            file.setLength(0);
-        } catch (IOException _) {  }
-    }
-
-    public void removeLines(int count, String path) {
-        try (RandomAccessFile file = new RandomAccessFile(path, "rw")) {
-            long length = file.length();
-            int linesCount = 0;
-
-            while (length > 0 && linesCount < count + 1) {
-                length--;
-                file.seek(length);
-                if (file.readByte() == '\n') {
-                    linesCount++;
-                }
-            }
-            file.setLength(length + 1);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
     }
 
     private static void ensureLogDirectoryExists() {

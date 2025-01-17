@@ -12,12 +12,9 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.LinkedHashMap;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class OrderBookHandler {
-    public static final long DEPTH_UNLOCK_WAIT_TIME_MILLS = 50_000L;
-    public static final String LOG_ORDER_BOOK_MESSAGES_TASK_KEY = "log_order_book_update";
     private final Log log = new Log("order_book_handler.log");
 
     private final APIService apiService;
@@ -29,8 +26,8 @@ public class OrderBookHandler {
     protected OrderBookCallback callback;
     protected ReadyStateCallback readyCallback;
 
-    private long depthEndpointLockTimeMills = -1;
     protected long orderBookLastUpdateId = -1;
+    protected OrderBook snapshot;
     protected boolean isOrderBookInitialized = false;
 
     public OrderBookHandler(String symbol,
@@ -42,15 +39,8 @@ public class OrderBookHandler {
         log.info("OrderBookHandler initialized");
     }
 
-    public void scheduleTasks() {
-        log.info("Setting up Order Book update task...");
-        this.taskManager.scheduleAtFixedRate(LOG_ORDER_BOOK_MESSAGES_TASK_KEY, this::logOrderBookUpdate, 0, 100, TimeUnit.MILLISECONDS);
-        log.info("Order Book update task scheduled");
-    }
-
     public void onMessage(JSONObject message) {
         long updateId = message.getLong("u");
-        log.debug(String.format("Received order book message: %s", message));
         if (!isOrderBookInitialized) {
             log.info("Order book not initialized. Queuing message for initialization...");
             initializeOrderBook(updateId, message);
@@ -58,7 +48,6 @@ public class OrderBookHandler {
         }
 
         if (message.getLong("pu") == orderBookLastUpdateId) {
-            log.debug(String.format("Valid order book update received (updateId: %d).", updateId));
             updateOrderBook(updateId, message);
         } else {
             log.warn("Order book out of sync. Reinitialization required.");
@@ -68,36 +57,25 @@ public class OrderBookHandler {
     }
 
     private void initializeOrderBook(long updateId, JSONObject message) {
-        log.info("Initializing order book...");
-        if (depthEndpointLockTimeMills != -1 &&
-                System.currentTimeMillis() < depthEndpointLockTimeMills + DEPTH_UNLOCK_WAIT_TIME_MILLS) {
-            log.info("Waiting for '/depth' endpoint to unlock...");
-            return;
-        }
-
         initializationMessagesQueue.put(updateId, message);
-        log.info(String.format("Message added to initialization queue (size: %d).", initializationMessagesQueue.size()));
+        log.debug(String.format("Message added to initialization queue: %s", message));
 
-        OrderBook snapshot = null;
-        if (initializationMessagesQueue.size() < 6) {
+        if (initializationMessagesQueue.size() < 20) {
             snapshot = apiService.getOrderBookPublicAPI(symbol).getResponse();
-        } else if (initializationMessagesQueue.size() > 11) {
+        } else if (initializationMessagesQueue.size() == 20) {
+            log.info("Applying snapshot and queued updates...");
+            orderBookLastUpdateId = snapshot.lastUpdateId();
+            asks.clear();
+            asks.putAll(snapshot.asks());
+            bids.clear();
+            bids.putAll(snapshot.bids());
+        } else if (initializationMessagesQueue.size() > 100) {
             initializationMessagesQueue.clear();
             log.warn("Initialization queue exceeded maximum size. Clearing and retrying...");
             return;
         }
-        if (snapshot == null) {
-            return;
-        }
 
-        log.info("Applying snapshot and queued updates...");
-        orderBookLastUpdateId = snapshot.lastUpdateId();
-        asks.clear();
-        asks.putAll(snapshot.asks());
-        bids.clear();
-        bids.putAll(snapshot.bids());
-        depthEndpointLockTimeMills = -1;
-
+        log.info("Trying to find updates starting message...");
         AtomicReference<Long> startingPoint = new AtomicReference<>();
         initializationMessagesQueue.entrySet().stream()
                 .filter(entry -> {
@@ -125,6 +103,7 @@ public class OrderBookHandler {
 
         if (isOrderBookInitialized && callback != null) {
             callback.notifyOrderBookUpdate(asks, bids);
+            logOrderBookUpdate();
         }
     }
 
@@ -140,12 +119,6 @@ public class OrderBookHandler {
                 orderBook.put(price, quantity);
             }
         }
-    }
-
-    public void cancelTasks() {
-        log.info("Cancelling Order Book update task...");
-        taskManager.cancel(LOG_ORDER_BOOK_MESSAGES_TASK_KEY);
-        log.info("Order Book update task cancelled...");
     }
 
     public void setCallback(OrderBookCallback callback) {
@@ -168,7 +141,7 @@ public class OrderBookHandler {
                 (map, entry) -> map.put(entry.getKey(), entry.getValue()),
                 Map::putAll);
 
-//        Log.removeLines(2, Log.ORDER_BOOK_LOGS_PATH);
+//        log.removeLines(2);
         log.debug("Top 5 Asks (shorts): " + asksTmpMap);
         log.debug("Top 5 Bids (longs): " + bidsTmpMap);
     }
@@ -180,7 +153,6 @@ public class OrderBookHandler {
                         readyCallback: %s
                         bids: %s
                         asks: %s
-                        depthEndpointLockTimeMills: %d
                         orderBookLastUpdateId: %s
                         isOrderBookInitialized: %s
                         initializationMessagesQueue: %s
@@ -190,7 +162,6 @@ public class OrderBookHandler {
                 readyCallback,
                 bids,
                 asks,
-                depthEndpointLockTimeMills,
                 orderBookLastUpdateId,
                 isOrderBookInitialized,
                 initializationMessagesQueue

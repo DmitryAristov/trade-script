@@ -27,7 +27,6 @@ public class ClosingOrdersCreatedStateHandler implements StateHandler {
 
     @Override
     public void handle(Position position, List<Order> openedOrders) {
-        log.info("Handling CLOSING_ORDERS_CREATED state...");
         if (position == null) {
             log.info("Position is closed. Resetting state to initial.");
             orderManager.resetToEmptyPosition();
@@ -40,7 +39,6 @@ public class ClosingOrdersCreatedStateHandler implements StateHandler {
                 log.debug(String.format("Actual opened orders: %s", openedOrders));
                 log.info("Closing position and resetting state.");
                 orderManager.closePosition();
-                orderManager.resetToEmptyPosition();
             } else {
                 log.info("Waiting for position to close...");
             }

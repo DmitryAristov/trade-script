@@ -20,7 +20,6 @@ public class EmptyPositionStateHandler implements StateHandler {
 
     @Override
     public void handle(Position position, List<Order> openedOrders) {
-        log.info("Handling EMPTY_POSITION state...");
         if (position == null) {
             log.info("No active position. System remains in EMPTY_POSITION state.");
         } else {

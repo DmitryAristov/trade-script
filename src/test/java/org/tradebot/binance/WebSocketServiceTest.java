@@ -64,6 +64,7 @@ class WebSocketServiceTest {
     void testOnMessage_TradeEvent() {
         JSONObject message = new JSONObject().put("e", "trade");
         webSocketService.streamsConnected.set(true);
+        webSocketService.webSocketReady.set(true);
         webSocketService.onMessage(message.toString());
         verify(tradeHandler).onMessage(
                 argThat(argument -> argument.getString("e").equals("trade"))
@@ -83,6 +84,7 @@ class WebSocketServiceTest {
     @Test
     void testOnMessage_UserDataEvent() {
         JSONObject message = new JSONObject().put("e", "ORDER_TRADE_UPDATE");
+        webSocketService.webSocketReady.set(true);
         webSocketService.streamsConnected.set(true);
         webSocketService.onMessage(message.toString());
         verify(userDataHandler).onMessage(
@@ -94,6 +96,7 @@ class WebSocketServiceTest {
     void testOnMessage_otherEvent() {
         JSONObject message = new JSONObject();
         message.put("e", "someEvent");
+        webSocketService.webSocketReady.set(true);
         webSocketService.streamsConnected.set(true);
         webSocketService.onMessage(message.toString());
         verify(userDataHandler).onMessage(

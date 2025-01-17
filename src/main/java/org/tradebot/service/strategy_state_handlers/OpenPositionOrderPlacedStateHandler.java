@@ -4,7 +4,6 @@ import org.tradebot.binance.APIService;
 import org.tradebot.domain.Order;
 import org.tradebot.domain.Position;
 import org.tradebot.service.OrderManager;
-import org.tradebot.service.Strategy;
 import org.tradebot.service.OrderManager.OrderType;
 import org.tradebot.util.Log;
 
@@ -28,11 +27,10 @@ public class OpenPositionOrderPlacedStateHandler implements StateHandler {
 
     @Override
     public void handle(Position position, List<Order> openedOrders) {
-        log.info("Handling OPEN_ORDER_PLACED state...");
         if (position == null) {
             handleEmptyPosition();
         } else {
-            handleNonEmptyPosition(position);
+            handleNonEmptyPosition();
         }
     }
 
@@ -53,7 +51,7 @@ public class OpenPositionOrderPlacedStateHandler implements StateHandler {
         }
     }
 
-    private void handleNonEmptyPosition(Position position) {
+    private void handleNonEmptyPosition() {
         log.info("Position is not empty in OPEN_ORDER_PLACED state. Validating open position order...");
         String reason;
         if (orderManager.getOrders().containsKey(OrderType.OPEN)) {
@@ -64,8 +62,7 @@ public class OpenPositionOrderPlacedStateHandler implements StateHandler {
                 switch (openOrder.getStatus()) {
                     case FILLED -> {
                         log.info("Open position order has been FILLED. Switching state to POSITION_OPENED...");
-                        orderManager.getOrders().remove(OrderType.OPEN);
-                        orderManager.setState(Strategy.State.POSITION_OPENED);
+                        orderManager.handleOpenOrderFilled();
                         return;
                     }
                     case PARTIALLY_FILLED -> {
@@ -77,9 +74,11 @@ public class OpenPositionOrderPlacedStateHandler implements StateHandler {
                 }
             }
         } else {
-            reason = "Open position order not found in local orders.";
+            log.warn("Open position order not found in local orders. Assume it is filled already. Switching state to POSITION_OPENED...");
+            orderManager.handleOpenOrderFilled();
+            return;
         }
-        resetToEmptyPosition(reason, position);
+        resetToEmptyPosition(reason);
     }
 
     private Order queryOpenOrder() {
@@ -96,13 +95,6 @@ public class OpenPositionOrderPlacedStateHandler implements StateHandler {
     private void resetToEmptyPosition(String reason) {
         log.warn(reason);
         log.debug(String.format("Local orders: %s", orderManager.getOrders()));
-        orderManager.resetToEmptyPosition();
-    }
-
-    private void resetToEmptyPosition(String reason, Position position) {
-        log.warn(reason);
-        log.debug(String.format("Local orders: %s", orderManager.getOrders()));
         orderManager.closePosition();
-        orderManager.resetToEmptyPosition();
     }
 }

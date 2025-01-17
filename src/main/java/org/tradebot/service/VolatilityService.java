@@ -10,31 +10,23 @@ import java.util.List;
 import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
 
+import static org.tradebot.service.TradingBot.*;
+
 public class VolatilityService {
 
-    private static final long UPDATE_TIME_PERIOD_HOURS = 12;
-    private static final int VOLATILITY_CALCULATE_PAST_TIME_DAYS = 1;
-    private static final int AVERAGE_PRICE_CALCULATE_PAST_TIME_DAYS = 1;
+    public static final String VOLATILITY_UPDATE_TASK_KEY = "volatility_update";
     private final Log log = new Log();
 
     private final APIService apiService;
+    private final TaskManager taskManager;
     private final String symbol;
     private VolatilityCallback callback;
 
     public VolatilityService(String symbol, APIService apiService, TaskManager taskManager) {
-        this.symbol = symbol;
         this.apiService = apiService;
-
-        log.info(String.format("""
-                        Initializing VolatilityService with parameters:
-                            Update time period: %d hours
-                            Volatility calculation period: %d days
-                            Average price calculation period: %d days""",
-                UPDATE_TIME_PERIOD_HOURS,
-                VOLATILITY_CALCULATE_PAST_TIME_DAYS,
-                AVERAGE_PRICE_CALCULATE_PAST_TIME_DAYS));
-
-        taskManager.scheduleAtFixedRate("volatility_update", this::updateVolatility, 0, UPDATE_TIME_PERIOD_HOURS, TimeUnit.HOURS);
+        this.taskManager = taskManager;
+        this.symbol = symbol;
+        this.taskManager.scheduleAtFixedRate(VOLATILITY_UPDATE_TASK_KEY, this::updateVolatility, 0, UPDATE_TIME_PERIOD_HOURS, TimeUnit.HOURS);
         log.info("VolatilityService started successfully.");
     }
 

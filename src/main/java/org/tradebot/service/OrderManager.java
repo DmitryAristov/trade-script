@@ -5,27 +5,25 @@ import org.tradebot.domain.*;
 import org.tradebot.util.Log;
 import org.tradebot.util.OrderUtils;
 
-import java.util.*;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.tradebot.service.Strategy.POSITION_LIVE_TIME;
+import static org.tradebot.service.TradingBot.POSITION_LIVE_TIME;
+import static org.tradebot.service.TradingBot.TEST_RUN;
 
 public class OrderManager {
+
     public static final String CLOSE_CLIENT_ID_PREFIX = "close_";
     public static final String TIMEOUT_CLOSE_CLIENT_ID_PREFIX = "timeout_stop_";
-    public static final String FORCE_CLOSE_CLIENT_ID_PREFIX = "force_stop_";
-
     public static final String AUTOCLOSE_POSITION_TASK_KEY = "autoclose_position_task";
-    public static final String CLOSE_POSITION_TASK_KEY = "close_position_task";
-    public static final String OPEN_ORDER_FILLED_TASK_KEY = "handle_open_order_filled_task";
-    public static final String FIRST_TAKE_ORDER_FILLED_TASK_KEY = "first_take_order_filled_task";
-    public static final String RESET_STATE_TO_EMPTY_POSITION_TASK_KEY = "reset_state_to_empty_position_task";
 
     public enum OrderType {
-        OPEN, STOP, TAKE_0, TAKE_1, BREAK_EVEN, CLOSE, TIMEOUT, FORCE_STOP
+        OPEN, STOP, TAKE_0, TAKE_1, BREAK_EVEN, CLOSE, TIMEOUT
     }
 
     private final Log log = new Log();
@@ -78,8 +76,6 @@ public class OrderManager {
                 handleOpenOrderFilled();
             } else if (isClosingOrder(clientId)) {
                 resetToEmptyPosition();
-            } else if (clientId.equals(orders.get(OrderType.FORCE_STOP))) {
-                handleForceStopOrderFilled();
             } else if (clientId.equals(orders.get(OrderType.TAKE_0))) {
                 handleFirstTakeOrderFilled();
             } else {
@@ -97,50 +93,36 @@ public class OrderManager {
                 clientId.equals(orders.get(OrderType.TIMEOUT));
     }
 
-    private void handleOpenOrderFilled() {
-        taskManager.scheduleAtFixedRate(OPEN_ORDER_FILLED_TASK_KEY, () -> {
-            log.info("Open order filled. Transitioning to POSITION_OPENED state.");
-            orders.remove(OrderType.OPEN);
-            state.set(Strategy.State.POSITION_OPENED);
+    public void handleOpenOrderFilled() {
+        log.info("Open order filled. Transitioning to POSITION_OPENED state.");
+        orders.remove(OrderType.OPEN);
+        state.set(Strategy.State.POSITION_OPENED);
 
-            Position position = apiService.getOpenPosition(symbol).getResponse();
-            if (position == null) {
-                log.warn("Position is empty after open order filled. Resetting state.");
-                taskManager.cancel(OPEN_ORDER_FILLED_TASK_KEY);
-                resetToEmptyPosition();
-                return;
-            }
-            placeClosingOrdersAndScheduleCloseTask(position);
-            taskManager.cancel(OPEN_ORDER_FILLED_TASK_KEY);
-        }, 0, 2, TimeUnit.SECONDS);
-    }
-
-    private void handleForceStopOrderFilled() {
-        log.error("Force stop order filled. Exiting.");
-        resetToEmptyPosition();
-        TradingBot.getInstance().exit("Force stop order filled");
+        Position position = apiService.getOpenPosition(symbol).getResponse();
+        if (position == null) {
+            log.warn("Position is empty after open order filled. Resetting state.");
+            resetToEmptyPosition();
+            return;
+        }
+        placeClosingOrdersAndScheduleCloseTask(position);
     }
 
     private void handleFirstTakeOrderFilled() {
-        taskManager.scheduleAtFixedRate(FIRST_TAKE_ORDER_FILLED_TASK_KEY, () -> {
-            log.info("First take order filled. Placing break-even stop.");
-            Position position = apiService.getOpenPosition(symbol).getResponse();
-            if (position == null) {
-                log.warn("Position is empty after first take order filled. Resetting state.");
-                taskManager.cancel(FIRST_TAKE_ORDER_FILLED_TASK_KEY);
-                resetToEmptyPosition();
-                return;
-            }
-            placeBreakEvenStop(position);
-            taskManager.cancel(FIRST_TAKE_ORDER_FILLED_TASK_KEY);
-        }, 0, 2, TimeUnit.SECONDS);
+        log.info("First take order filled. Placing break-even stop.");
+        Position position = apiService.getOpenPosition(symbol).getResponse();
+        if (position == null) {
+            log.warn("Position is empty after first take order filled. Resetting state.");
+            resetToEmptyPosition();
+            return;
+        }
+        placeBreakEvenStop(position);
     }
 
     private void handleUnknownFilledOrder() {
         log.info("Handling unknown order update...");
         Position position = apiService.getOpenPosition(symbol).getResponse();
-        if (position == null) {
-            log.warn("Position is empty after unknown order update or manual actions. Resetting state.");
+        if (state.get() != Strategy.State.POSITION_EMPTY && position == null) {
+            log.warn("Position became empty after unknown order update or manual actions. Resetting state.");
             resetToEmptyPosition();
         } else {
             log.warn("Unknown update. No action required");
@@ -168,9 +150,11 @@ public class OrderManager {
             } else if (errors.stream().anyMatch(apiError -> apiError.code() == -2021)) {
                 log.warn("Got error 'Order would immediately trigger' - closing position due to fast price moving under limits");
                 closePosition();
+            } else if (errors.stream().anyMatch(apiError -> apiError.code() == -4015)) {
+                log.warn("Got error 'Client order id is not valid', orders are placed, skipping...");
             } else {
                 log.warn("Got unknown errors: " + errors);
-                closeForce();
+                closePosition();
             }
         }
     }
@@ -210,7 +194,7 @@ public class OrderManager {
         taskManager.schedule(
                 AUTOCLOSE_POSITION_TASK_KEY,
                 this::closeTimeout,
-                POSITION_LIVE_TIME,
+                TEST_RUN ? 5 : POSITION_LIVE_TIME,
                 TimeUnit.MINUTES
         );
         log.info("Auto-close task scheduled.");
@@ -250,13 +234,6 @@ public class OrderManager {
         closePosition(OrderType.TIMEOUT, timeoutOrder);
     }
 
-    protected void closeForce() {
-        log.warn("Forcefully closing position due to critical error...");
-        Order order = orderUtils.createClosePositionOrder(symbol, FORCE_CLOSE_CLIENT_ID_PREFIX + System.currentTimeMillis());
-        closePosition(OrderType.FORCE_STOP, order);
-
-    }
-
     public void closePosition() {
         log.info("Closing position due to previous errors...");
         Order closeOrder = orderUtils.createClosePositionOrder(symbol, CLOSE_CLIENT_ID_PREFIX + System.currentTimeMillis());
@@ -264,52 +241,41 @@ public class OrderManager {
     }
 
     protected void closePosition(OrderType orderType, Order order) {
-        taskManager.scheduleAtFixedRate(CLOSE_POSITION_TASK_KEY, () -> {
-            synchronized (lock) {
-                log.info(String.format("Executing close position task for order type: %s", orderType));
-                Position position = apiService.getOpenPosition(symbol).getResponse();
-                if (position == null) {
-                    log.warn("Position is already empty. Resetting state.");
-                    taskManager.cancel(CLOSE_POSITION_TASK_KEY);
-                    return;
-                }
-                order.setQuantity(Math.abs(position.getPositionAmt()));
-                order.setSide(switch (position.getType()) {
-                    case SHORT -> Order.Side.BUY;
-                    case LONG -> Order.Side.SELL;
-                });
-
-                apiService.cancelAllOpenOrders(symbol);
-                orders.clear();
-
-                HTTPResponse<Order, APIError> response = apiService.placeOrder(order);
-                if (response.isSuccess()) {
-                    orders.put(orderType, response.getValue().getNewClientOrderId());
-                    log.info(String.format("Position close order is placed. Order details: %s", response.getValue()));
-                    taskManager.cancel(CLOSE_POSITION_TASK_KEY);
-                } else {
-                    log.error("Unexpected error during position closure.");
-                }
+        synchronized (lock) {
+            log.info(String.format("Executing close position task for order type: %s", orderType));
+            Position position = apiService.getOpenPosition(symbol).getResponse();
+            if (position == null) {
+                log.warn("Position is already empty. Resetting state.");
+                return;
             }
-        }, 0, 2, TimeUnit.SECONDS);
+            order.setQuantity(Math.abs(position.getPositionAmt()));
+            order.setSide(switch (position.getType()) {
+                case SHORT -> Order.Side.BUY;
+                case LONG -> Order.Side.SELL;
+            });
+
+            apiService.cancelAllOpenOrders(symbol);
+            orders.clear();
+
+            HTTPResponse<Order, APIError> response = apiService.placeOrder(order);
+            if (response.isSuccess()) {
+                orders.put(orderType, response.getValue().getNewClientOrderId());
+                log.info(String.format("Position close order is placed. Order details: %s", response.getValue()));
+            } else {
+                log.error("Unexpected error during position closure.");
+            }
+        }
     }
 
     public void resetToEmptyPosition() {
-        taskManager.scheduleAtFixedRate(RESET_STATE_TO_EMPTY_POSITION_TASK_KEY, () -> {
-            synchronized (lock) {
-                log.info("Resetting state to POSITION_EMPTY...");
-                taskManager.cancel(AUTOCLOSE_POSITION_TASK_KEY);
-                state.set(Strategy.State.POSITION_EMPTY);
-                currentImbalance = null;
-                orders.clear();
-                apiService.cancelAllOpenOrders(symbol);
-                taskManager.cancel(RESET_STATE_TO_EMPTY_POSITION_TASK_KEY);
-            }
-        }, 0, 2, TimeUnit.SECONDS);
-//        if (System.currentTimeMillis() > fakeOpenTime) {
-//            fakeOpenTime = System.currentTimeMillis() + 30_000L;
-//            log.info("Updating next open position time to " + TimeFormatter.format(fakeOpenTime));
-//        }
+        synchronized (lock) {
+            log.info("Resetting state to POSITION_EMPTY...");
+            taskManager.cancel(AUTOCLOSE_POSITION_TASK_KEY);
+            state.set(Strategy.State.POSITION_EMPTY);
+            currentImbalance = null;
+            orders.clear();
+            apiService.cancelAllOpenOrders(symbol);
+        }
     }
 
     public Strategy.State getState() {
@@ -326,5 +292,15 @@ public class OrderManager {
 
     public Object getLock() {
         return lock;
+    }
+
+    public void logAll() {
+        log.debug(String.format("""
+                        TaskManager:
+                            orders: %s
+                            state: %s
+                            currentImbalance: %s
+                        """, orders, state, currentImbalance));
+
     }
 }

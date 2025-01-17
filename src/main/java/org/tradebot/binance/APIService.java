@@ -25,13 +25,11 @@ public class APIService {
         Map<String, String> params = new HashMap<>();
         validateOrder(order);
 
-        // mandatory params
         params.put("symbol", order.getSymbol());
         params.put("side", order.getSide().toString());
         params.put("type", order.getType().toString());
         params.put("newClientOrderId", String.valueOf(order.getNewClientOrderId()));
 
-        // optional params
         if (order.getPrice() != null) {
             params.put("price", String.valueOf(order.getPrice()));
         }
@@ -89,19 +87,6 @@ public class APIService {
         httpClient.sendRequest("/fapi/v1/order", "DELETE", params);
     }
 
-    public void cancelOrder(Order order) {
-        Map<String, String> params = new HashMap<>();
-
-        params.put("symbol", order.getSymbol());
-        if (order.getId() != null) {
-            params.put("orderId", String.valueOf(order.getId()));
-        } else {
-            params.put("origClientOrderId", String.valueOf(order.getNewClientOrderId()));
-        }
-
-        httpClient.sendRequest("/fapi/v1/order", "DELETE", params);
-    }
-
     public void cancelAllOpenOrders(String symbol) {
         Map<String, String> params = new HashMap<>();
         params.put("symbol", symbol);
@@ -113,24 +98,6 @@ public class APIService {
 
         params.put("symbol", symbol);
         params.put("origClientOrderId", clientId);
-
-        HTTPResponse<String, APIError> response = httpClient.sendRequest("/fapi/v1/order", "GET", params);
-        if (response.isSuccess()) {
-            return HTTPResponse.success(response.getStatusCode(), parseOrder(response.getValue()));
-        } else {
-            return HTTPResponse.error(response.getStatusCode(), response.getError());
-        }
-    }
-
-    public HTTPResponse<Order, APIError>  queryOrder(Order order) {
-        Map<String, String> params = new HashMap<>();
-
-        params.put("symbol", order.getSymbol());
-        if (order.getId() != null) {
-            params.put("orderId", String.valueOf(order.getId()));
-        } else {
-            params.put("origClientOrderId", String.valueOf(order.getNewClientOrderId()));
-        }
 
         HTTPResponse<String, APIError> response = httpClient.sendRequest("/fapi/v1/order", "GET", params);
         if (response.isSuccess()) {
@@ -199,8 +166,8 @@ public class APIService {
         }
     }
 
-    public void keepAliveUserStreamKey() {
-        httpClient.sendRequest("/fapi/v1/listenKey", "PUT", new HashMap<>());
+    public HTTPResponse<String, APIError> keepAliveUserStreamKey() {
+        return httpClient.sendRequest("/fapi/v1/listenKey", "PUT", new HashMap<>());
     }
 
     public void removeUserStreamKey() {
@@ -255,23 +222,6 @@ public class APIService {
         HTTPResponse<String, APIError> response = httpClient.sendRequest("/fapi/v1/openOrders", "GET", params);
         if (response.isSuccess()) {
             return HTTPResponse.success(response.getStatusCode(), parseOrders(response.getValue()));
-        } else {
-            return HTTPResponse.error(response.getStatusCode(), response.getError());
-        }
-    }
-
-    public HTTPResponse<Order, APIError> getOpenOrder(Order order) {
-        Map<String, String> params = new HashMap<>();
-        params.put("symbol", order.getSymbol());
-        if (order.getId() != null) {
-            params.put("orderId", String.valueOf(order.getId()));
-        } else {
-            params.put("origClientOrderId", String.valueOf(order.getNewClientOrderId()));
-        }
-
-        HTTPResponse<String, APIError> response = httpClient.sendRequest("/fapi/v1/openOrder", "GET", params);
-        if (response.isSuccess()) {
-            return HTTPResponse.success(response.getStatusCode(), parseOrder(response.getValue()));
         } else {
             return HTTPResponse.error(response.getStatusCode(), response.getError());
         }

@@ -4,9 +4,10 @@ import org.tradebot.domain.Imbalance;
 import org.tradebot.domain.Order;
 import org.tradebot.domain.Position;
 
+import static org.tradebot.service.TradingBot.STOP_LOSS_MULTIPLIER;
+import static org.tradebot.service.TradingBot.TAKE_PROFIT_THRESHOLDS;
+
 public class OrderUtils {
-    public static final double[] TAKE_PROFIT_THRESHOLDS = new double[]{0.35, 0.75};
-    public static final double STOP_LOSS_MULTIPLIER = 0.02;
     public static final String OPEN_POSITION_CLIENT_ID_PREFIX = "position_open_order_";
     public static final String STOP_CLIENT_ID_PREFIX = "stop_";
     public static final String TAKE_CLIENT_ID_PREFIX = "take_";

@@ -11,6 +11,7 @@ public class TaskManager {
 
     protected final Map<String, ScheduledExecutorService> executors = new ConcurrentHashMap<>();
     private final Map<String, State> states = new ConcurrentHashMap<>();
+    private final Map<String, Long> periods = new ConcurrentHashMap<>();
 
     public void scheduleAtFixedRate(String taskId, Runnable task, long delay, long period, TimeUnit timeUnit) {
         cancel(taskId);
@@ -30,6 +31,7 @@ public class TaskManager {
         log.info(String.format("Task '%s' scheduled to run every %d %s and start after %d %s", taskId, period, timeUnit, delay, timeUnit),
                 System.currentTimeMillis() + timeUnit.toMillis(delay));
         states.put(taskId, state);
+        periods.put(taskId, period);
         executors.put(taskId, executor);
     }
 
@@ -93,6 +95,10 @@ public class TaskManager {
         log.info("All tasks have been cancelled");
     }
 
+    public long getTaskPeriod(String taskKey) {
+        return periods.getOrDefault(taskKey, -1L);
+    }
+
     private static class State {
         private final AtomicBoolean isRunning = new AtomicBoolean(false);
         private final AtomicBoolean isCancelled = new AtomicBoolean(false);
@@ -125,6 +131,13 @@ public class TaskManager {
     }
 
     public void logAll() {
+        log.debug("TaskManager executors size: " + executors.size());
+        log.debug("TaskManager states size: " + states.size());
+        log.debug(String.format("""
+                        TaskManager:
+                            executors: %s
+                            states: %s
+                        """, executors, states));
 
     }
 }

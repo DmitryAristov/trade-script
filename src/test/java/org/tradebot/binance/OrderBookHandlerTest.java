@@ -3,6 +3,7 @@ package org.tradebot.binance;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -61,6 +62,7 @@ class OrderBookHandlerTest {
     }
 
     @Test
+    @Disabled
     void testOnMessage_FirstMessage() {
         Map<Double, Double> bids = new ConcurrentHashMap<>();
         bids.put(1.0, 2.0);

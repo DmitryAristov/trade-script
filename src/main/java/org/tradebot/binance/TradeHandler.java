@@ -71,7 +71,6 @@ public class TradeHandler {
         if (entry == null) {
             return;
         }
-//            Log.removeLines(1, Log.MARKET_DATA_LOGS_PATH);
         log.debug("entry :: " + entry);
         if (callback != null)
             callback.notifyNewMarketEntry(openTime, entry);

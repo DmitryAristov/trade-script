@@ -15,13 +15,26 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static org.tradebot.service.TradingBot.TEST_RUN;
 import static org.tradebot.util.JsonParser.parseAPIError;
 
 public class HttpClient {
 
-    private static final String API_KEY = "****";
-    private static final String API_SECRET = "****";
-    protected static final String BASE_URL = "https://fapi.binance.com";
+    private static final String API_KEY;
+    private static final String API_SECRET;
+    private static final String BASE_URL;
+    static {
+        if (TEST_RUN) {
+            API_KEY = "****";
+            API_SECRET = "****";
+            BASE_URL = "https://testnet.binancefuture.com";
+        } else {
+            API_KEY = "****";
+            API_SECRET = "****";
+            BASE_URL = "https://fapi.binance.com";
+        }
+    }
+
     private final Log log = new Log();
     public static long TIME_DIFF = 0;
 
@@ -61,7 +74,6 @@ public class HttpClient {
                 log.debug(String.format("Request body: %s", query));
             }
 
-            // response
             int responseCode = connection.getResponseCode();
             log.debug(String.format("Response headers: %s", connection.getHeaderFields()));
             long finish = System.nanoTime();
@@ -70,22 +82,6 @@ public class HttpClient {
             return readResponse(connection, responseCode);
         } catch (Exception e) {
             throw log.throwError("Failed to send HTTP request", e);
-        }
-    }
-
-    private HTTPResponse<String, APIError> readResponse(HttpURLConnection connection, int responseCode) throws IOException {
-        if (responseCode >= 200 && responseCode < 300) {
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
-                String response = reader.lines().collect(Collectors.joining());
-                log.debug(String.format("Response code: %d, Response body: %s", responseCode, response));
-                return HTTPResponse.success(responseCode, response);
-            }
-        } else {
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getErrorStream()))) {
-                String errorResponse = reader.lines().collect(Collectors.joining());
-                log.warn(String.format("Response code: %d, Error body: %s", responseCode, errorResponse));
-                return HTTPResponse.error(responseCode, parseAPIError(errorResponse));
-            }
         }
     }
 
@@ -124,7 +120,6 @@ public class HttpClient {
             connection.setRequestMethod(method);
             log.debug(String.format("Request properties: %s", connection.getRequestProperties()));
 
-            // response
             int responseCode = connection.getResponseCode();
             Map<String, List<String>> headers = connection.getHeaderFields();
             log.debug(String.format("Response headers: %s", headers));
@@ -136,6 +131,31 @@ public class HttpClient {
             return readResponse(connection, responseCode);
         } catch (Exception e) {
             throw log.throwError("Failed to send HTTP request", e);
+        }
+    }
+
+//    private int requestsCount = 0;
+    private HTTPResponse<String, APIError> readResponse(HttpURLConnection connection, int responseCode) throws IOException {
+//        if (TEST_RUN) {
+//            requestsCount++;
+//            if (requestsCount % 19 == 0) {
+//                return HTTPResponse.error(responseCode, new APIError(400, "simulating error message... " + requestsCount));
+//            } else if (requestsCount % 26 == 0) {
+//                throw new RuntimeException("Simulating exception when reading response... " + requestsCount);
+//            }
+//        }
+        if (responseCode >= 200 && responseCode < 300) {
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
+                String response = reader.lines().collect(Collectors.joining());
+                log.debug(String.format("Response code: %d, Response body: %s", responseCode, response));
+                return HTTPResponse.success(responseCode, response);
+            }
+        } else {
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getErrorStream()))) {
+                String errorResponse = reader.lines().collect(Collectors.joining());
+                log.warn(String.format("Response code: %d, Error body: %s", responseCode, errorResponse));
+                return HTTPResponse.error(responseCode, parseAPIError(errorResponse));
+            }
         }
     }
 }
