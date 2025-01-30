@@ -1,5 +1,6 @@
 package org.tradebot.binance;
 
+import org.jetbrains.annotations.Nullable;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.tradebot.domain.Position;
@@ -21,6 +22,8 @@ public class UserDataHandler {
             JSONObject orderJson = message.getJSONObject("o");
             String status = orderJson.getString("X");
             String clientId = orderJson.getString("c");
+            if (!validOrderUpdate(orderJson))
+                return;
 
             if (callback != null)
                 callback.notifyOrderUpdate(clientId, status);
@@ -34,17 +37,16 @@ public class UserDataHandler {
                     if (!validPositionUpdate(positionUpdate))
                         continue;
 
-                    Position position = new Position();
-                    position.setPositionAmt(Double.parseDouble(positionUpdate.getString("pa")));
-                    position.setEntryPrice(Double.parseDouble(positionUpdate.getString("ep")));
-                    position.setBreakEvenPrice(Double.parseDouble(positionUpdate.getString("bep")));
-
                     if (callback != null)
-                        callback.notifyPositionUpdate(position);
+                        callback.notifyPositionUpdate(parsePosition(positionUpdate));
                     break;
                 }
             }
         }
+    }
+
+    private boolean validOrderUpdate(JSONObject orderJson) {
+        return this.symbol.toUpperCase().equals(orderJson.getString("s"));
     }
 
     private boolean validPositionUpdate(JSONObject positionUpdate) {
@@ -52,6 +54,22 @@ public class UserDataHandler {
                 "BOTH".equals(positionUpdate.getString("ps")) &&
                 positionUpdate.has("s") &&
                 symbol.toUpperCase().equals(positionUpdate.getString("s"));
+    }
+
+    private static @Nullable Position parsePosition(JSONObject positionUpdate) {
+        Position position = new Position();
+        double entryPrice = Double.parseDouble(positionUpdate.getString("ep"));
+        if (entryPrice == 0)
+            return null;
+        double positionAmount = Double.parseDouble(positionUpdate.getString("pa"));
+        if (positionAmount == 0)
+            return null;
+
+        position.setSymbol(positionUpdate.getString("s"));
+        position.setEntryPrice(entryPrice);
+        position.setPositionAmt(positionAmount);
+        position.setBreakEvenPrice(Double.parseDouble(positionUpdate.getString("bep")));
+        return position;
     }
 
     public void setCallback(UserDataCallback callback) {

@@ -1,5 +1,7 @@
 package org.tradebot.service.strategy_state_handlers;
 
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.tradebot.binance.APIService;
 import org.tradebot.domain.Order;
 import org.tradebot.domain.Position;
@@ -26,10 +28,10 @@ public class ClosingOrdersCreatedStateHandler implements StateHandler {
     }
 
     @Override
-    public void handle(Position position, List<Order> openedOrders) {
+    public void handle(@Nullable Position position, List<Order> openedOrders) {
         if (position == null) {
             log.info("Position is closed. Resetting state to initial.");
-            orderManager.resetToEmptyPosition();
+            orderManager.resetToEmptyPosition(null);
         } else {
             log.info("Position is open. Validating set of closing orders...");
             if (!validateClosingOrdersState(openedOrders, position)) {
@@ -38,14 +40,14 @@ public class ClosingOrdersCreatedStateHandler implements StateHandler {
                 log.debug(String.format("Local orders: %s", orderManager.getOrders()));
                 log.debug(String.format("Actual opened orders: %s", openedOrders));
                 log.info("Closing position and resetting state.");
-                orderManager.closePosition();
+                orderManager.closePosition(position);
             } else {
                 log.info("Waiting for position to close...");
             }
         }
     }
 
-    private boolean validateClosingOrdersState(List<Order> openedOrders, Position position) {
+    private boolean validateClosingOrdersState(List<Order> openedOrders, @NotNull Position position) {
         log.info("Validating closing orders...");
         int orderCount = openedOrders.size();
         log.debug(String.format("Opened orders count: %d", orderCount));
@@ -69,7 +71,7 @@ public class ClosingOrdersCreatedStateHandler implements StateHandler {
         }
     }
 
-    private boolean validateTwoOrdersState(List<Order> openedOrders, Position position) {
+    private boolean validateTwoOrdersState(List<Order> openedOrders, @NotNull Position position) {
         if (orderManager.getOrders().containsKey(OrderType.TAKE_0)) {
             log.info("First take order is present locally.");
             var take0Opt = openedOrders.stream()
@@ -93,11 +95,11 @@ public class ClosingOrdersCreatedStateHandler implements StateHandler {
         }
     }
 
-    private boolean handleTake0OrderStatus(Order take0, Position position) {
+    private boolean handleTake0OrderStatus(Order take0, @NotNull Position position) {
         switch (take0.getStatus()) {
             case FILLED -> {
                 log.info("First take order filled. Placing break-even stop.");
-                orderManager.placeBreakEvenStop(position);
+                orderManager.handleFirstTakeOrderFilled(position);
                 return true;
             }
             case PARTIALLY_FILLED -> {

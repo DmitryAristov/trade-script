@@ -1,5 +1,7 @@
 package org.tradebot.service;
 
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.tradebot.binance.APIService;
 import org.tradebot.domain.*;
 import org.tradebot.util.Log;
@@ -35,8 +37,9 @@ public class OrderManager {
     private final int leverage;
     private final Object lock = new Object();
     private final Map<OrderType, String> orders = new ConcurrentHashMap<>();
+    private final AtomicReference<Position> position = new AtomicReference<>();
     private final AtomicReference<Strategy.State> state = new AtomicReference<>(Strategy.State.POSITION_EMPTY);
-    private Imbalance currentImbalance = null;
+    private final AtomicReference<Imbalance> currentImbalance = new AtomicReference<>();
 
     public OrderManager(TaskManager taskManager,
                         APIService apiService,
@@ -49,13 +52,13 @@ public class OrderManager {
         log.info("OrderManager initialized");
     }
 
-    public void placeOpenOrder(final Imbalance imbalance, double price) {
+    public void placeOpenOrder(final @NotNull Imbalance imbalance, double price) {
         if (state.get() != Strategy.State.POSITION_EMPTY) {
             log.warn(String.format("Attempted to place open order in invalid state: %s. Action aborted.", state.get()));
             return;
         }
 
-        currentImbalance = imbalance;
+        currentImbalance.set(imbalance);
         double quantity = apiService.getAccountBalance().getResponse() * leverage / price;
         synchronized (lock) {
             log.info("Placing open order...");
@@ -66,26 +69,30 @@ public class OrderManager {
         }
     }
 
-    public void handleOrderUpdate(String clientId) {
+    public void handleOrderUpdate(@Nullable String clientId) {
         if (clientId == null) {
             log.warn("Order update received without client ID. Skipping.");
             return;
         }
         synchronized (lock) {
             if (clientId.equals(orders.get(OrderType.OPEN))) {
-                handleOpenOrderFilled();
+                handleOpenOrderFilled(position.get());
             } else if (isClosingOrder(clientId)) {
-                resetToEmptyPosition();
+                resetToEmptyPosition(position.get());
             } else if (clientId.equals(orders.get(OrderType.TAKE_0))) {
-                handleFirstTakeOrderFilled();
+                handleFirstTakeOrderFilled(position.get());
             } else {
                 log.warn(String.format("Unknown order update received: %s", clientId));
-                handleUnknownFilledOrder();
+                handleUnknownFilledOrder(position.get());
             }
         }
     }
 
-    private boolean isClosingOrder(String clientId) {
+    public void handlePositionUpdate(@Nullable Position position) {
+        this.position.set(position);
+    }
+
+    private boolean isClosingOrder(@NotNull String clientId) {
         return clientId.equals(orders.get(OrderType.CLOSE)) ||
                 clientId.equals(orders.get(OrderType.STOP)) ||
                 clientId.equals(orders.get(OrderType.TAKE_1)) ||
@@ -93,43 +100,41 @@ public class OrderManager {
                 clientId.equals(orders.get(OrderType.TIMEOUT));
     }
 
-    public void handleOpenOrderFilled() {
+    public void handleOpenOrderFilled(@NotNull Position position) {
         log.info("Open order filled. Transitioning to POSITION_OPENED state.");
         orders.remove(OrderType.OPEN);
         state.set(Strategy.State.POSITION_OPENED);
-
-        Position position = apiService.getOpenPosition(symbol).getResponse();
-        if (position == null) {
-            log.warn("Position is empty after open order filled. Resetting state.");
-            resetToEmptyPosition();
-            return;
-        }
         placeClosingOrdersAndScheduleCloseTask(position);
     }
 
-    private void handleFirstTakeOrderFilled() {
+    public void handleFirstTakeOrderFilled(@NotNull Position position) {
         log.info("First take order filled. Placing break-even stop.");
-        Position position = apiService.getOpenPosition(symbol).getResponse();
-        if (position == null) {
-            log.warn("Position is empty after first take order filled. Resetting state.");
-            resetToEmptyPosition();
-            return;
+        if (orders.containsKey(OrderType.STOP)) {
+            cancelExistingStopOrder();
         }
-        placeBreakEvenStop(position);
+        log.info("Placing break-even stop order...");
+        HTTPResponse<Order, APIError> response = apiService.placeOrder(orderUtils.createBreakEvenStop(symbol, position));
+        if (response.isSuccess()) {
+            orders.put(OrderType.BREAK_EVEN, response.getValue().getNewClientOrderId());
+            orders.remove(OrderType.TAKE_0);
+            log.info(String.format("Break-even stop order placed successfully: %s", response.getValue()));
+        } else if (response.getError().code() == -2021) {
+            log.warn("Got error 'Order would immediately trigger' - closing position due to fast price moving under limits");
+            closePosition(position);
+        }
     }
 
-    private void handleUnknownFilledOrder() {
+    private void handleUnknownFilledOrder(@Nullable Position position) {
         log.info("Handling unknown order update...");
-        Position position = apiService.getOpenPosition(symbol).getResponse();
-        if (state.get() != Strategy.State.POSITION_EMPTY && position == null) {
+        if (position == null) {
             log.warn("Position became empty after unknown order update or manual actions. Resetting state.");
-            resetToEmptyPosition();
+            resetToEmptyPosition(null);
         } else {
             log.warn("Unknown update. No action required");
         }
     }
 
-    public void placeClosingOrdersAndScheduleCloseTask(Position position) {
+    public void placeClosingOrdersAndScheduleCloseTask(@NotNull final Position position) {
         log.info("Placing closing orders...");
 
         Set<APIError> errors = new HashSet<>();
@@ -146,21 +151,21 @@ public class OrderManager {
         } else {
             if (errors.stream().anyMatch(apiError -> apiError.code() == -2022)) {
                 log.warn("Got error 'ReduceOnly Order is rejected' which mean that position is empty");
-                resetToEmptyPosition();
+                resetToEmptyPosition(position);
             } else if (errors.stream().anyMatch(apiError -> apiError.code() == -2021)) {
                 log.warn("Got error 'Order would immediately trigger' - closing position due to fast price moving under limits");
-                closePosition();
+                closePosition(position);
             } else if (errors.stream().anyMatch(apiError -> apiError.code() == -4015)) {
                 log.warn("Got error 'Client order id is not valid', orders are placed, skipping...");
             } else {
                 log.warn("Got unknown errors: " + errors);
-                closePosition();
+                closePosition(position);
             }
         }
     }
 
-    private void placeStopOrder(Position position, Set<APIError> errors) {
-        HTTPResponse<Order, APIError> response = apiService.placeOrder(orderUtils.createStop(symbol, currentImbalance, position));
+    private void placeStopOrder(@NotNull Position position, Set<APIError> errors) {
+        HTTPResponse<Order, APIError> response = apiService.placeOrder(orderUtils.createStop(symbol, currentImbalance.get(), position));
         if (response.isSuccess()) {
             orders.put(OrderType.STOP, response.getValue().getNewClientOrderId());
             log.info(String.format("Stop order placed: %s", response.getValue()));
@@ -169,8 +174,8 @@ public class OrderManager {
         }
     }
 
-    private void placeFirstTakeOrder(Position position, Set<APIError> errors) {
-        HTTPResponse<Order, APIError> response = apiService.placeOrder(orderUtils.createTake(symbol, position, currentImbalance.size(), 0));
+    private void placeFirstTakeOrder(@NotNull Position position, Set<APIError> errors) {
+        HTTPResponse<Order, APIError> response = apiService.placeOrder(orderUtils.createTake(symbol, position, currentImbalance.get().size(), 0));
         if (response.isSuccess()) {
             orders.put(OrderType.TAKE_0, response.getValue().getNewClientOrderId());
             log.info(String.format("First take order placed: %s", response.getValue()));
@@ -179,8 +184,8 @@ public class OrderManager {
         }
     }
 
-    private void placeSecondTakeOrder(Position position, Set<APIError> errors) {
-        HTTPResponse<Order, APIError> response = apiService.placeOrder(orderUtils.createTake(symbol, position, currentImbalance.size(), 1));
+    private void placeSecondTakeOrder(@NotNull Position position, Set<APIError> errors) {
+        HTTPResponse<Order, APIError> response = apiService.placeOrder(orderUtils.createTake(symbol, position, currentImbalance.get().size(), 1));
         if (response.isSuccess()) {
             orders.put(OrderType.TAKE_1, response.getValue().getNewClientOrderId());
             log.info(String.format("Second take order placed: %s", response.getValue()));
@@ -194,26 +199,11 @@ public class OrderManager {
         taskManager.schedule(
                 AUTOCLOSE_POSITION_TASK_KEY,
                 this::closeTimeout,
-                TEST_RUN ? 5 : POSITION_LIVE_TIME,
+//                TEST_RUN ? 5 :
+                POSITION_LIVE_TIME,
                 TimeUnit.MINUTES
         );
         log.info("Auto-close task scheduled.");
-    }
-
-    public void placeBreakEvenStop(Position position) {
-        log.info("Placing break-even stop order...");
-        if (orders.containsKey(OrderType.STOP)) {
-            cancelExistingStopOrder();
-        }
-        HTTPResponse<Order, APIError> response = apiService.placeOrder(orderUtils.createBreakEvenStop(symbol, position));
-        if (response.isSuccess()) {
-            orders.put(OrderType.BREAK_EVEN, response.getValue().getNewClientOrderId());
-            orders.remove(OrderType.TAKE_0);
-            log.info(String.format("Break-even stop order placed successfully: %s", response.getValue()));
-        } else if (response.getError().code() == -2021) {
-            log.warn("Got error 'Order would immediately trigger' - closing position due to fast price moving under limits");
-            closePosition();
-        }
     }
 
     private void cancelExistingStopOrder() {
@@ -231,23 +221,23 @@ public class OrderManager {
     protected void closeTimeout() {
         log.info("Closing position due to timeout...");
         Order timeoutOrder = orderUtils.createClosePositionOrder(symbol, TIMEOUT_CLOSE_CLIENT_ID_PREFIX + System.currentTimeMillis());
-        closePosition(OrderType.TIMEOUT, timeoutOrder);
+        closePosition(OrderType.TIMEOUT, timeoutOrder, position.get());
     }
 
-    public void closePosition() {
+    public void closePosition(@Nullable Position position) {
         log.info("Closing position due to previous errors...");
         Order closeOrder = orderUtils.createClosePositionOrder(symbol, CLOSE_CLIENT_ID_PREFIX + System.currentTimeMillis());
-        closePosition(OrderType.CLOSE, closeOrder);
+        closePosition(OrderType.CLOSE, closeOrder, position);
     }
 
-    protected void closePosition(OrderType orderType, Order order) {
+    protected void closePosition(OrderType orderType, Order order, @Nullable Position position) {
+        if (position == null) {
+            log.warn("Trying to close position when it is already closed.");
+            return;
+        }
+
         synchronized (lock) {
             log.info(String.format("Executing close position task for order type: %s", orderType));
-            Position position = apiService.getOpenPosition(symbol).getResponse();
-            if (position == null) {
-                log.warn("Position is already empty. Resetting state.");
-                return;
-            }
             order.setQuantity(Math.abs(position.getPositionAmt()));
             order.setSide(switch (position.getType()) {
                 case SHORT -> Order.Side.BUY;
@@ -267,14 +257,16 @@ public class OrderManager {
         }
     }
 
-    public void resetToEmptyPosition() {
+    public void resetToEmptyPosition(@Nullable Position position) {
         synchronized (lock) {
             log.info("Resetting state to POSITION_EMPTY...");
             taskManager.cancel(AUTOCLOSE_POSITION_TASK_KEY);
             state.set(Strategy.State.POSITION_EMPTY);
-            currentImbalance = null;
-            orders.clear();
+            closePosition(position);
+
+            this.position.set(null);
             apiService.cancelAllOpenOrders(symbol);
+            orders.clear();
         }
     }
 

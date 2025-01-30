@@ -1,5 +1,6 @@
 package org.tradebot.util;
 
+import org.jetbrains.annotations.NotNull;
 import org.tradebot.domain.Imbalance;
 import org.tradebot.domain.Order;
 import org.tradebot.domain.Position;
@@ -15,8 +16,8 @@ public class OrderUtils {
     private final Log log = new Log();
 
     public Order createOpen(String symbol,
-                                   Imbalance imbalance,
-                                   double quantity) {
+                            @NotNull Imbalance imbalance,
+                            double quantity) {
         Order open = new Order();
         open.setSymbol(symbol);
         open.setType(Order.Type.MARKET);
@@ -33,14 +34,20 @@ public class OrderUtils {
     }
 
     public Order createTake(String symbol,
-                                   Position position,
-                                   double imbalanceSize,
-                                   int number) {
+                            @NotNull Position position,
+                            double imbalanceSize,
+                            int number) {
         Order take = new Order();
         take.setSymbol(symbol);
         take.setType(Order.Type.LIMIT);
         take.setReduceOnly(true);
-        take.setQuantity(Math.abs(position.getPositionAmt()) * 0.5);
+        double halfPosition = Math.abs(position.getPositionAmt()) * 0.5;
+        if (number == 0) {
+            take.setQuantity(halfPosition);
+        } else {
+            double secondQuantity = position.getPositionAmt() - Order.getBigDecimalQuantity(halfPosition).doubleValue();
+            take.setQuantity(secondQuantity);
+        }
         take.setTimeInForce(Order.TimeInForce.GTC);
 
         switch (position.getType()) {
@@ -59,7 +66,9 @@ public class OrderUtils {
         return take;
     }
 
-    public Order createStop(String symbol, Imbalance imbalance, Position position) {
+    public Order createStop(String symbol,
+                            @NotNull Imbalance imbalance,
+                            @NotNull Position position) {
         Order stop = new Order();
         stop.setSymbol(symbol);
         stop.setType(Order.Type.STOP_MARKET);
@@ -81,7 +90,8 @@ public class OrderUtils {
         return stop;
     }
 
-    public Order createBreakEvenStop(String symbol, Position position) {
+    public Order createBreakEvenStop(String symbol,
+                                     @NotNull Position position) {
         Order breakEven = new Order();
         breakEven.setSymbol(symbol);
         breakEven.setType(Order.Type.STOP_MARKET);
@@ -97,7 +107,8 @@ public class OrderUtils {
         return breakEven;
     }
 
-    public Order createClosePositionOrder(String symbol, String clientId) {
+    public Order createClosePositionOrder(String symbol,
+                                          String clientId) {
         Order close = new Order();
         close.setSymbol(symbol);
         close.setType(Order.Type.MARKET);

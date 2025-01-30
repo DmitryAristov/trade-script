@@ -16,7 +16,7 @@ import java.util.concurrent.TimeUnit;
 
 public class TradingBot {
     private final Log log = new Log();
-    public static final boolean TEST_RUN = true;
+    public static final boolean TEST_RUN = false;
 
     //account settings
     public static final Precision DEFAULT_PRECISION = new Precision(1, 2);

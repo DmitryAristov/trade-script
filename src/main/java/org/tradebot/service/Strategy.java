@@ -1,5 +1,7 @@
 package org.tradebot.service;
 
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.tradebot.binance.APIService;
 import org.tradebot.domain.Imbalance;
 import org.tradebot.domain.Order;
@@ -18,6 +20,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import static org.tradebot.service.TradingBot.TEST_RUN;
 
 public class Strategy implements OrderBookCallback, ImbalanceStateCallback, UserDataCallback, WebSocketCallback {
 
@@ -77,7 +81,7 @@ public class Strategy implements OrderBookCallback, ImbalanceStateCallback, User
         }
     }
 
-    private double getPrice(Imbalance imbalance) {
+    private double getPrice(@NotNull Imbalance imbalance) {
         double price = switch (imbalance.getType()) {
             case UP -> Collections.min(asks.keySet());
             case DOWN -> Collections.max(bids.keySet());
@@ -124,18 +128,18 @@ public class Strategy implements OrderBookCallback, ImbalanceStateCallback, User
         }
     }
 
-//    private int userMessagesCount = 0;
+    private int userMessagesCount = 0;
     @Override
     public void notifyOrderUpdate(String clientId, String status) {
         log.info(String.format("Received order update: %s - %s", clientId, status));
-        if (!webSocketReady.get()) {
-            log.warn("WebSocket is not ready, skipping order update...");
-            return;
-        }
+//        if (!webSocketReady.get()) {
+//            log.warn("WebSocket is not ready, skipping order update...");
+//            return;
+//        }
         if ("FILLED".equals(status)) {
 //            if (TEST_RUN) {
 //                userMessagesCount++;
-//                if (userMessagesCount % 7 == 0) {
+//                if (userMessagesCount % 11 == 0) {
 //                    log.info("Simulating missing order update for order: " + clientId);
 //                    return;
 //                }
@@ -145,11 +149,20 @@ public class Strategy implements OrderBookCallback, ImbalanceStateCallback, User
     }
 
     @Override
-    public void notifyPositionUpdate(Position position) {
+    public void notifyPositionUpdate(@Nullable Position position) {
         log.info(String.format("Position updated: %s", position));
-        if (!webSocketReady.get()) {
-            log.warn("WebSocket is not ready, skipping account update...");
-        }
+//        if (!webSocketReady.get()) {
+//            log.warn("WebSocket is not ready, skipping account update...");
+//            return;
+//        }
+//        if (TEST_RUN) {
+//            userMessagesCount++;
+//            if (userMessagesCount % 11 == 0) {
+//                log.info("Simulating missing position update: " + position);
+//                return;
+//            }
+//        }
+        orderManager.handlePositionUpdate(position);
     }
 
     @Override

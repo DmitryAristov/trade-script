@@ -99,10 +99,7 @@ public class Order {
     }
 
     public void setPrice(double price) {
-        Precision precision = DEFAULT_PRECISION;
-        if (TradingBot.getInstance() != null && TradingBot.getInstance().getPrecision() != null) {
-            precision = TradingBot.getInstance().getPrecision();
-        }this.price = BigDecimal.valueOf(price).setScale(precision.price(), RoundingMode.HALF_UP);
+        this.price = getBigDecimalPrice(price);
     }
 
     public BigDecimal getQuantity() {
@@ -110,11 +107,7 @@ public class Order {
     }
 
     public void setQuantity(double quantity) {
-        Precision precision = DEFAULT_PRECISION;
-        if (TradingBot.getInstance() != null && TradingBot.getInstance().getPrecision() != null) {
-            precision = TradingBot.getInstance().getPrecision();
-        }
-        this.quantity = BigDecimal.valueOf(quantity).setScale(precision.quantity(), RoundingMode.DOWN);
+        this.quantity = getBigDecimalQuantity(quantity);
     }
 
     public BigDecimal getStopPrice() {
@@ -122,11 +115,23 @@ public class Order {
     }
 
     public void setStopPrice(double stopPrice) {
+        this.stopPrice = getBigDecimalPrice(stopPrice);
+    }
+
+    public static BigDecimal getBigDecimalPrice(double value) {
         Precision precision = DEFAULT_PRECISION;
         if (TradingBot.getInstance() != null && TradingBot.getInstance().getPrecision() != null) {
             precision = TradingBot.getInstance().getPrecision();
         }
-        this.stopPrice = BigDecimal.valueOf(stopPrice).setScale(precision.price(), RoundingMode.HALF_UP);
+        return BigDecimal.valueOf(value).setScale(precision.price(), RoundingMode.HALF_UP);
+    }
+
+    public static BigDecimal getBigDecimalQuantity(double quantity) {
+        Precision precision = DEFAULT_PRECISION;
+        if (TradingBot.getInstance() != null && TradingBot.getInstance().getPrecision() != null) {
+            precision = TradingBot.getInstance().getPrecision();
+        }
+        return BigDecimal.valueOf(quantity).setScale(precision.quantity(), RoundingMode.DOWN);
     }
 
     public void setCreateTime(Long createTime) {

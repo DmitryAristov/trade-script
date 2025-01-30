@@ -84,6 +84,7 @@ public class JsonParser {
             return null;
         } else {
             JSONObject positionJson = jsonArray.getJSONObject(0);
+            String symbol = positionJson.getString("symbol");
             double entryPrice = Double.parseDouble(positionJson.getString("entryPrice"));
             double positionAmt = Double.parseDouble(positionJson.getString("positionAmt"));
             double breakEvenPrice = Double.parseDouble(positionJson.getString("breakEvenPrice"));
@@ -91,6 +92,7 @@ public class JsonParser {
                 return null;
             }
             Position result = new Position();
+            result.setSymbol(symbol);
             result.setEntryPrice(entryPrice);
             result.setPositionAmt(positionAmt);
             result.setBreakEvenPrice(breakEvenPrice);

@@ -1,5 +1,7 @@
 package org.tradebot.service.strategy_state_handlers;
 
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import org.tradebot.binance.APIService;
 import org.tradebot.domain.Order;
 import org.tradebot.domain.Position;
@@ -27,30 +29,18 @@ public class PositionOpenedStateHandler implements StateHandler {
     }
 
     @Override
-    public void handle(Position position, List<Order> openedOrders) {
+    public void handle(@Nullable Position position, List<Order> openedOrders) {
         if (position == null) {
-            handleEmptyPosition(openedOrders);
+            log.warn("Position is empty, but local state is POSITION_OPENED.");
+            log.debug(String.format("Local orders: %s", orderManager.getOrders()));
+            orderManager.resetToEmptyPosition(null);
+            log.info("State reset to EMPTY_POSITION.");
         } else {
             handleNonEmptyPosition(position, openedOrders);
         }
     }
 
-    private void handleEmptyPosition(List<Order> openedOrders) {
-        log.warn("Position is empty, but local state is POSITION_OPENED.");
-        log.debug(String.format("Local orders: %s", orderManager.getOrders()));
-
-        if (!openedOrders.isEmpty()) {
-            log.warn("Found opened orders while position is empty. Cancelling all opened orders...");
-            log.debug(String.format("Opened orders: %s", openedOrders));
-            apiService.cancelAllOpenOrders(symbol);
-            orderManager.getOrders().clear();
-            log.info("All opened orders have been cancelled.");
-        }
-        orderManager.resetToEmptyPosition();
-        log.info("State reset to EMPTY_POSITION.");
-    }
-
-    private void handleNonEmptyPosition(Position position, List<Order> openedOrders) {
+    private void handleNonEmptyPosition(@NotNull Position position, List<Order> openedOrders) {
         log.info("Position is present. Validating closing orders...");
         if (openedOrders.isEmpty()) {
             log.warn("No closing orders found. Placing closing orders...");
@@ -66,14 +56,14 @@ public class PositionOpenedStateHandler implements StateHandler {
         }
     }
 
-    private void handleInvalidClosingOrders(Position position, List<Order> openedOrders) {
+    private void handleInvalidClosingOrders(@NotNull Position position, List<Order> openedOrders) {
         log.warn("Invalid or missing closing orders detected.");
         log.debug(String.format("Opened orders: %s", openedOrders));
         log.debug(String.format("Local orders: %s", orderManager.getOrders()));
         log.debug(String.format("Position: %s", position));
 
         log.info("Closing position and resetting state...");
-        orderManager.closePosition();
+        orderManager.closePosition(position);
         log.info("State reset to EMPTY_POSITION.");
     }
 

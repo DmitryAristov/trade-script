@@ -1,5 +1,6 @@
 package org.tradebot.service.strategy_state_handlers;
 
+import org.jetbrains.annotations.Nullable;
 import org.tradebot.domain.Order;
 import org.tradebot.domain.Position;
 import org.tradebot.service.OrderManager;
@@ -19,7 +20,7 @@ public class EmptyPositionStateHandler implements StateHandler {
     }
 
     @Override
-    public void handle(Position position, List<Order> openedOrders) {
+    public void handle(@Nullable Position position, List<Order> openedOrders) {
         if (position == null) {
             log.info("No active position. System remains in EMPTY_POSITION state.");
         } else {

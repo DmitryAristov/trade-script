@@ -6,9 +6,18 @@ public class Position {
         SHORT
     }
 
+    private String symbol;
     private double entryPrice;
     private double positionAmt;
     private double breakEvenPrice;
+
+    public String getSymbol() {
+        return symbol;
+    }
+
+    public void setSymbol(String symbol) {
+        this.symbol = symbol;
+    }
 
     public double getEntryPrice() {
         return entryPrice;
