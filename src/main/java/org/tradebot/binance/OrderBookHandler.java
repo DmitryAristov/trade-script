@@ -5,7 +5,6 @@ import org.json.JSONObject;
 import org.tradebot.domain.OrderBook;
 import org.tradebot.listener.OrderBookCallback;
 import org.tradebot.listener.ReadyStateCallback;
-import org.tradebot.service.TaskManager;
 import org.tradebot.util.Log;
 
 import java.util.Map;
@@ -15,10 +14,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class OrderBookHandler {
-    private final Log log = new Log("order_book_handler.log");
+    private final Log log = new Log("order_book");
 
     private final APIService apiService;
-    private final TaskManager taskManager;
     protected final String symbol;
     protected final Map<Double, Double> bids = new ConcurrentHashMap<>();
     protected final Map<Double, Double> asks = new ConcurrentHashMap<>();
@@ -31,10 +29,8 @@ public class OrderBookHandler {
     protected boolean isOrderBookInitialized = false;
 
     public OrderBookHandler(String symbol,
-                            APIService apiService,
-                            TaskManager taskManager) {
+                            APIService apiService) {
         this.apiService = apiService;
-        this.taskManager = taskManager;
         this.symbol = symbol;
         log.info("OrderBookHandler initialized");
     }
@@ -103,7 +99,7 @@ public class OrderBookHandler {
 
         if (isOrderBookInitialized && callback != null) {
             callback.notifyOrderBookUpdate(asks, bids);
-            logOrderBookUpdate();
+//            logOrderBookUpdate();
         }
     }
 

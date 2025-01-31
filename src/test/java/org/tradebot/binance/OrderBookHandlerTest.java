@@ -32,16 +32,13 @@ class OrderBookHandlerTest {
     @Mock
     private ReadyStateCallback readyStateCallback;
 
-    @Mock
-    private TaskManager taskManager;
-
     @InjectMocks
     private OrderBookHandler orderBookHandler;
 
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        orderBookHandler = new OrderBookHandler("BTCUSDT", apiService, taskManager);
+        orderBookHandler = new OrderBookHandler("BTCUSDT", apiService);
     }
 
     @Test

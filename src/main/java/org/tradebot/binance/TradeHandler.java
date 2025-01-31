@@ -14,7 +14,7 @@ public class TradeHandler {
 
     private static final int MAX_TRADE_QUEUE_SIZE = 100000;
     public static final String MARKET_DATA_UPDATE_TASK_KEY = "market_data_update";
-    private final Log log = new Log("market_data_handler.log");
+    private final Log log = new Log("market_data");
 
     private final TaskManager taskManager;
     protected MarketDataCallback callback;
@@ -71,7 +71,7 @@ public class TradeHandler {
         if (entry == null) {
             return;
         }
-        log.debug("entry :: " + entry);
+//        log.debug("entry :: " + entry);
         if (callback != null)
             callback.notifyNewMarketEntry(openTime, entry);
     }

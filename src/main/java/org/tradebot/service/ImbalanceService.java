@@ -22,7 +22,7 @@ public class ImbalanceService implements VolatilityCallback, MarketDataCallback 
         COMPLETED
     }
 
-    private final Log log = new Log("imbalance_service.log");
+    private final Log log = new Log("imbalance_service");
 
     protected double priceChangeThreshold, speedThreshold;
     protected State currentState = State.WAIT;

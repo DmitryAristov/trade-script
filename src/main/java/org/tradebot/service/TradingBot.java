@@ -170,7 +170,7 @@ public class TradingBot {
         imbalanceService = new ImbalanceService();
         tradeHandler = new TradeHandler(taskManager);
         userDataStreamHandler = new UserDataHandler(symbol);
-        orderBookHandler = new OrderBookHandler(symbol, apiService, taskManager);
+        orderBookHandler = new OrderBookHandler(symbol, apiService);
         webSocketService = new WebSocketService(symbol, tradeHandler, orderBookHandler, userDataStreamHandler, apiService, taskManager);
         volatilityService = new VolatilityService(symbol, apiService, taskManager);
 
