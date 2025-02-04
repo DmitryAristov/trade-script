@@ -42,12 +42,6 @@ class OrderBookHandlerTest {
     }
 
     @Test
-    void testSetCallback() {
-        orderBookHandler.setCallback(callback);
-        assertEquals(orderBookHandler.callback, callback);
-    }
-
-    @Test
     void testInitializeOrderBook_Failure() {
         OrderBook mockOrderBook = new OrderBook(123450, new HashMap<>(), new HashMap<>());
         when(apiService.getOrderBookPublicAPI(anyString())).thenReturn(HTTPResponse.success(200, mockOrderBook));

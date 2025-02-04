@@ -191,8 +191,8 @@ public class APIService {
     public HTTPResponse<TreeMap<Long, MarketEntry>, APIError> getMarketDataPublicAPI(String symbol, String interval, int limit) {
         Map<String, String> params = new HashMap<>();
         params.put("symbol", symbol);
-        params.put("limit", String.valueOf(limit));
         params.put("interval", String.valueOf(interval));
+        params.put("limit", String.valueOf(limit));
 
         var response = httpClient.sendPublicRequest("/fapi/v1/klines", "GET", params);
         if (response.isSuccess()) {

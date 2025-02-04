@@ -189,7 +189,8 @@ public class TradingBot {
         imbalanceService.setCallback(strategy);
         tradeHandler.setCallback(imbalanceService);
         volatilityService.setCallback(imbalanceService);
-        orderBookHandler.setCallback(strategy);
+        orderBookHandler.addCallback(strategy);
+        orderBookHandler.addCallback(tradeHandler);
         orderBookHandler.setReadyCallback(webSocketService);
         userDataStreamHandler.setCallback(strategy);
         webSocketService.setCallback(strategy);

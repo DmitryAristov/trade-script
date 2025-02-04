@@ -41,11 +41,12 @@ public class OrderUtils {
         take.setSymbol(symbol);
         take.setType(Order.Type.LIMIT);
         take.setReduceOnly(true);
+        double fullPosition = Math.abs(position.getPositionAmt());
         double halfPosition = Math.abs(position.getPositionAmt()) * 0.5;
         if (number == 0) {
             take.setQuantity(halfPosition);
         } else {
-            double secondQuantity = position.getPositionAmt() - Order.getBigDecimalQuantity(halfPosition).doubleValue();
+            double secondQuantity = fullPosition - Order.getBigDecimalQuantity(halfPosition).doubleValue();
             take.setQuantity(secondQuantity);
         }
         take.setTimeInForce(Order.TimeInForce.GTC);

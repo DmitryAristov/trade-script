@@ -58,7 +58,7 @@ public class WebSocketService extends WebSocketClient implements ReadyStateCallb
         log.info("WebSocket connection opened.");
         scheduleTasks();
         log.info("Subscribing WebSocket trade stream...");
-        send(String.format("{\"method\": \"SUBSCRIBE\", \"params\": [\"%s@trade\"], \"id\": 1}", symbol.toLowerCase()));
+        send(String.format("{\"method\": \"SUBSCRIBE\", \"params\": [\"%s@aggTrade\"], \"id\": 1}", symbol.toLowerCase()));
         log.info("Subscribing WebSocket depth stream...");
         send(String.format("{\"method\": \"SUBSCRIBE\", \"params\": [\"%s@depth@100ms\"], \"id\": 2}", symbol.toLowerCase()));
         connectUserDataStream();
@@ -75,7 +75,7 @@ public class WebSocketService extends WebSocketClient implements ReadyStateCallb
         if (message.has("e")) {
             String eventType = message.getString("e");
             switch (eventType) {
-                case "trade" -> tradeHandler.onMessage(message);
+                case "aggTrade" -> tradeHandler.onMessage(message);
                 case "depthUpdate" -> orderBookHandler.onMessage(message);
                 default -> userDataHandler.onMessage(message.getString("e"), message);
             }
@@ -111,7 +111,7 @@ public class WebSocketService extends WebSocketClient implements ReadyStateCallb
             updateReadyState();
 
             log.info("Unsubscribing from WebSocket trade stream...");
-            send(String.format("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"%s@trade\"], \"id\": 1}", symbol.toLowerCase()));
+            send(String.format("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"%s@aggTrade\"], \"id\": 1}", symbol.toLowerCase()));
             log.info("Unsubscribing from WebSocket depth stream...");
             send(String.format("{\"method\": \"UNSUBSCRIBE\", \"params\": [\"%s@depth@100ms\"], \"id\": 2}", symbol.toLowerCase()));
             disconnectUserDataStream();

@@ -7,6 +7,8 @@ import org.tradebot.listener.OrderBookCallback;
 import org.tradebot.listener.ReadyStateCallback;
 import org.tradebot.util.Log;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.LinkedHashMap;
@@ -21,7 +23,7 @@ public class OrderBookHandler {
     protected final Map<Double, Double> bids = new ConcurrentHashMap<>();
     protected final Map<Double, Double> asks = new ConcurrentHashMap<>();
     protected final TreeMap<Long, JSONObject> initializationMessagesQueue = new TreeMap<>();
-    protected OrderBookCallback callback;
+    protected List<OrderBookCallback> callbacks = new ArrayList<>();
     protected ReadyStateCallback readyCallback;
 
     protected long orderBookLastUpdateId = -1;
@@ -97,9 +99,9 @@ public class OrderBookHandler {
         updateOrderBook(data.getJSONArray("b"), bids);
         orderBookLastUpdateId = updateId;
 
-        if (isOrderBookInitialized && callback != null) {
-            callback.notifyOrderBookUpdate(asks, bids);
-//            logOrderBookUpdate();
+        if (isOrderBookInitialized) {
+            logOrderBookUpdate();
+            callbacks.forEach(callback -> callback.notifyOrderBookUpdate(asks, bids));
         }
     }
 
@@ -117,8 +119,8 @@ public class OrderBookHandler {
         }
     }
 
-    public void setCallback(OrderBookCallback callback) {
-        this.callback = callback;
+    public void addCallback(OrderBookCallback callback) {
+        this.callbacks.add(callback);
         log.info(String.format("Callback set: %s", callback.getClass().getName()));
     }
 
@@ -154,7 +156,7 @@ public class OrderBookHandler {
                         initializationMessagesQueue: %s
                         """,
                 symbol,
-                callback,
+                callbacks,
                 readyCallback,
                 bids,
                 asks,
