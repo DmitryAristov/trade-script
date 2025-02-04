@@ -7,10 +7,7 @@ import org.tradebot.listener.OrderBookCallback;
 import org.tradebot.service.TaskManager;
 import org.tradebot.util.Log;
 
-import java.util.ArrayDeque;
-import java.util.Collections;
-import java.util.Deque;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.TimeUnit;
 
@@ -129,7 +126,20 @@ public class TradeHandler implements OrderBookCallback {
         this.bids = bids;
     }
 
+    public Double getLastPrice() {
+        return lastPrice;
+    }
+
     public void logAll() {
+        Deque<JSONObject> snapshotActiveQueue;
+        synchronized (activeQueue) {
+            snapshotActiveQueue = new ArrayDeque<>(activeQueue);
+        }
+        Deque<JSONObject> snapshotProcessingQueue;
+        synchronized (processingQueue) {
+            snapshotProcessingQueue = new ArrayDeque<>(processingQueue);
+        }
+
         log.debug(String.format("""
                         callback: %s
                         activeQueue: %s
@@ -137,8 +147,8 @@ public class TradeHandler implements OrderBookCallback {
                         lastPrice: %s
                         """,
                 callback,
-                activeQueue,
-                processingQueue,
+                snapshotActiveQueue,
+                snapshotProcessingQueue,
                 lastPrice
         ));
     }

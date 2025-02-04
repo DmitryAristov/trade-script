@@ -203,6 +203,18 @@ public class WebSocketService extends WebSocketClient implements ReadyStateCallb
         }
     }
 
+    public boolean getWebSocketReady() {
+        return webSocketReady.get();
+    }
+
+    public boolean getOrderBookReady() {
+        return orderBookReady.get();
+    }
+
+    public boolean getStreamsConnected() {
+        return streamsConnected.get();
+    }
+
     public void setCallback(WebSocketCallback callback) {
         this.callback = callback;
         log.info(String.format("Callback set: %s", callback.getClass().getName()));

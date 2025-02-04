@@ -8,6 +8,7 @@ import org.tradebot.binance.HttpClient;
 import org.tradebot.binance.TradeHandler;
 import org.tradebot.domain.AccountInfo;
 import org.tradebot.domain.Precision;
+import org.tradebot.domain.TradingBotState;
 import org.tradebot.service.strategy_state_handlers.*;
 import org.tradebot.util.Log;
 
@@ -17,6 +18,7 @@ import java.util.concurrent.TimeUnit;
 public class TradingBot {
     private final Log log = new Log();
     public static final boolean TEST_RUN = false;
+    public static final String STATE_UPDATE_TASK_KEY = "state_update";
 
     //account settings
     public static final Precision DEFAULT_PRECISION = new Precision(1, 2);
@@ -197,6 +199,9 @@ public class TradingBot {
         webSocketService.connect();
 
         log.info(String.format("'%s' bot started", symbol));
+
+        taskManager.scheduleAtFixedRate(STATE_UPDATE_TASK_KEY, this::updateState, 2, 5, TimeUnit.SECONDS);
+
         setShutdownHook();
         log.info("Shutdown hook added.");
     }
@@ -217,6 +222,26 @@ public class TradingBot {
 
     public Precision getPrecision() {
         return precision;
+    }
+
+    private void updateState() {
+        try {
+            TradingBotState state = new TradingBotState();
+
+            state.setImbalanceState(instance.imbalanceService.currentState.get());
+            state.setStrategyState(instance.orderManager.getState());
+            state.setWebSocketState(instance.webSocketService.getWebSocketReady());
+            state.setOrderBookReady(instance.webSocketService.getOrderBookReady());
+            state.setStreamsConnected(instance.webSocketService.getStreamsConnected());
+            state.setLastPrice(tradeHandler.getLastPrice());
+            state.setAsks(instance.orderBookHandler.getAsks(3));
+            state.setBids(instance.orderBookHandler.getBids(3));
+            state.setCurrentTime(System.currentTimeMillis());
+
+            log.updateState(state);
+        } catch (Exception e) {
+            log.error("update state failed", e);
+        }
     }
 
     public void logAll() {

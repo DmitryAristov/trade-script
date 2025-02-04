@@ -7,11 +7,7 @@ import org.tradebot.listener.OrderBookCallback;
 import org.tradebot.listener.ReadyStateCallback;
 import org.tradebot.util.Log;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.TreeMap;
-import java.util.LinkedHashMap;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -60,14 +56,14 @@ public class OrderBookHandler {
 
         if (initializationMessagesQueue.size() < 20) {
             snapshot = apiService.getOrderBookPublicAPI(symbol).getResponse();
-        } else if (initializationMessagesQueue.size() == 20) {
+        } else if (initializationMessagesQueue.size() <= 80) {
             log.info("Applying snapshot and queued updates...");
             orderBookLastUpdateId = snapshot.lastUpdateId();
             asks.clear();
             asks.putAll(snapshot.asks());
             bids.clear();
             bids.putAll(snapshot.bids());
-        } else if (initializationMessagesQueue.size() > 100) {
+        } else {
             initializationMessagesQueue.clear();
             log.warn("Initialization queue exceeded maximum size. Clearing and retrying...");
             return;
@@ -128,16 +124,31 @@ public class OrderBookHandler {
         this.readyCallback = readyCallback;
     }
 
-    private void logOrderBookUpdate() {
-        Map<Double, Double> asksTmpMap = new TreeMap<>(asks);
-        Map<Double, Double> bidsTmpMap = new TreeMap<>(bids).descendingMap();
+    public Map<Double, Double> getBids(int limit) {
+        Map<Double, Double> bidsTmpMap;
+        synchronized (bids) {
+            bidsTmpMap = new TreeMap<>(bids).descendingMap();
+        }
+        bidsTmpMap = bidsTmpMap.entrySet().stream().limit(limit).collect(LinkedHashMap::new,
+                (map, entry) -> map.put(entry.getKey(), entry.getValue()),
+                Map::putAll);
+        return bidsTmpMap;
+    }
 
-        asksTmpMap = asksTmpMap.entrySet().stream().limit(5).collect(LinkedHashMap::new,
+    public Map<Double, Double> getAsks(int limit) {
+        Map<Double, Double> asksTmpMap;
+        synchronized (asks) {
+            asksTmpMap = new TreeMap<>(asks);
+        }
+        asksTmpMap = asksTmpMap.entrySet().stream().limit(limit).collect(LinkedHashMap::new,
                 (map, entry) -> map.put(entry.getKey(), entry.getValue()),
                 Map::putAll);
-        bidsTmpMap = bidsTmpMap.entrySet().stream().limit(5).collect(LinkedHashMap::new,
-                (map, entry) -> map.put(entry.getKey(), entry.getValue()),
-                Map::putAll);
+        return asksTmpMap;
+    }
+
+    private void logOrderBookUpdate() {
+        Map<Double, Double> asksTmpMap = getAsks(5);
+        Map<Double, Double> bidsTmpMap = getBids(5);
 
 //        log.removeLines(2);
         log.debug("Top 5 Asks (shorts): " + asksTmpMap);
@@ -145,6 +156,23 @@ public class OrderBookHandler {
     }
 
     public void logAll() {
+        Map<Double, Double> snapshotAsks;
+        synchronized (asks) {
+            snapshotAsks = new TreeMap<>(asks);
+        }
+        Map<Double, Double> snapshotBids;
+        synchronized (bids) {
+            snapshotBids = new TreeMap<>(bids);
+        }
+        TreeMap<Long, JSONObject> snapshotInitializationMessagesQueue;
+        synchronized (initializationMessagesQueue) {
+            snapshotInitializationMessagesQueue = new TreeMap<>(initializationMessagesQueue);
+        }
+        OrderBook snapshotOrderBook;
+        synchronized (snapshot) {
+            snapshotOrderBook = snapshot;
+        }
+
         log.debug(String.format("""
                         symbol: %s
                         callback: %s
@@ -154,15 +182,17 @@ public class OrderBookHandler {
                         orderBookLastUpdateId: %s
                         isOrderBookInitialized: %s
                         initializationMessagesQueue: %s
+                        snapshotOrderBook: %s
                         """,
                 symbol,
                 callbacks,
                 readyCallback,
-                bids,
-                asks,
+                snapshotBids,
+                snapshotAsks,
                 orderBookLastUpdateId,
                 isOrderBookInitialized,
-                initializationMessagesQueue
+                snapshotInitializationMessagesQueue,
+                snapshotOrderBook
         ));
     }
 }

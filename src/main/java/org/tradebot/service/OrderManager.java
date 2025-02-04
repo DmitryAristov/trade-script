@@ -7,6 +7,7 @@ import org.tradebot.domain.*;
 import org.tradebot.util.Log;
 import org.tradebot.util.OrderUtils;
 
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -287,12 +288,16 @@ public class OrderManager {
     }
 
     public void logAll() {
+        Map<OrderType, String> snapshotOrders;
+        synchronized (orders) {
+            snapshotOrders = new HashMap<>(orders);
+        }
         log.debug(String.format("""
                         TaskManager:
                             orders: %s
                             state: %s
                             currentImbalance: %s
-                        """, orders, state, currentImbalance));
+                        """, snapshotOrders, state.get(), currentImbalance.get()));
 
     }
 }

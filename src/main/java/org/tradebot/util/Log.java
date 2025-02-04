@@ -1,5 +1,6 @@
 package org.tradebot.util;
 
+import org.tradebot.domain.TradingBotState;
 import org.tradebot.service.TradingBot;
 
 import java.io.BufferedWriter;
@@ -24,6 +25,7 @@ public class Log {
     }
 
     public static final String LOGS_DIR_PATH = System.getProperty("user.dir") + "/output/logs/";
+    public static final String STATE_FILE_PATH = System.getProperty("user.dir") + "/output/state/";
     private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd");
 
     static {
@@ -152,6 +154,14 @@ public class Log {
             if (!created) {
                 throw new RuntimeException("Failed to create log directory: " + LOGS_DIR_PATH);
             }
+        }
+    }
+
+    public void updateState(TradingBotState state) {
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(STATE_FILE_PATH + "state.txt", false))) {
+            writer.write(state.toString());
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
     }
 }

@@ -184,10 +184,8 @@ public class Strategy implements OrderBookCallback, ImbalanceStateCallback, User
                         Strategy state:
                             Symbol: %s
                             Leverage: %d
-                            Bids: %s
-                            Asks: %s
                             WebSocket state: %s
                         """,
-                symbol, leverage, bids, asks, webSocketReady));
+                symbol, leverage, webSocketReady.get()));
     }
 }

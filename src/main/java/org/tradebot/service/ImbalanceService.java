@@ -9,6 +9,7 @@ import org.tradebot.util.Log;
 import org.tradebot.util.TimeFormatter;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 
 import static org.tradebot.service.TradingBot.*;
@@ -25,7 +26,7 @@ public class ImbalanceService implements VolatilityCallback, MarketDataCallback 
     private final Log log = new Log("imbalance_service");
 
     protected double priceChangeThreshold, speedThreshold;
-    protected State currentState = State.WAIT;
+    protected AtomicReference<State> currentState = new AtomicReference<>(State.WAIT);
     protected Imbalance currentImbalance = null;
 
     private final TreeMap<Long, MarketEntry> seconds = new TreeMap<>();
@@ -44,7 +45,7 @@ public class ImbalanceService implements VolatilityCallback, MarketDataCallback 
         updateData(currentTime, currentEntry);
 
         try {
-            switch (currentState) {
+            switch (currentState.get()) {
                 case WAIT -> handleWaitState(currentTime, currentEntry);
                 case PROGRESS -> trackImbalanceProgress(currentTime, currentEntry);
                 case POTENTIAL_END_POINT -> evaluatePossibleEndPoint(currentTime, currentEntry);
@@ -179,9 +180,9 @@ public class ImbalanceService implements VolatilityCallback, MarketDataCallback 
         if (currentImbalance != null) {
             log.debug(String.format("Found the best one: %s", currentImbalance));
             log.info("Changing state to PROGRESS");
-            currentState = State.PROGRESS;
+            currentState.set(State.PROGRESS);
             if (callback != null)
-                callback.notifyImbalanceStateUpdate(currentTime, currentState, currentImbalance);
+                callback.notifyImbalanceStateUpdate(currentTime, currentState.get(), currentImbalance);
         } else {
             log.debug("Valid imbalance not found");
         }
@@ -235,9 +236,9 @@ public class ImbalanceService implements VolatilityCallback, MarketDataCallback 
         }
 
         if (checkPotentialEndPointCondition(currentTime, currentEntry)) {
-            currentState = State.POTENTIAL_END_POINT;
+            currentState.set(State.POTENTIAL_END_POINT);
             if (callback != null)
-                callback.notifyImbalanceStateUpdate(currentTime, currentState, currentImbalance);
+                callback.notifyImbalanceStateUpdate(currentTime, currentState.get(), currentImbalance);
         }
     }
 
@@ -251,9 +252,9 @@ public class ImbalanceService implements VolatilityCallback, MarketDataCallback 
                 if (currentEntry.high() > currentImbalance.getEndPrice()) {
                     currentImbalance.setEndPrice(currentEntry.high());
                     currentImbalance.setEndTime(currentTime);
-                    currentState = State.PROGRESS;
+                    currentState.set(State.PROGRESS);
                     if (callback != null)
-                        callback.notifyImbalanceStateUpdate(currentTime, currentState, currentImbalance);
+                        callback.notifyImbalanceStateUpdate(currentTime, currentState.get(), currentImbalance);
                     log.debug("Imbalance is in progress");
                     return true;
                 }
@@ -262,9 +263,9 @@ public class ImbalanceService implements VolatilityCallback, MarketDataCallback 
                 if (currentEntry.low() < currentImbalance.getEndPrice()) {
                     currentImbalance.setEndPrice(currentEntry.low());
                     currentImbalance.setEndTime(currentTime);
-                    currentState = State.PROGRESS;
+                    currentState.set(State.PROGRESS);
                     if (callback != null)
-                        callback.notifyImbalanceStateUpdate(currentTime, currentState, currentImbalance);
+                        callback.notifyImbalanceStateUpdate(currentTime, currentState.get(), currentImbalance);
                     log.debug("Imbalance is in progress");
                     return true;
                 }
@@ -282,9 +283,9 @@ public class ImbalanceService implements VolatilityCallback, MarketDataCallback 
         double completeTime = currentImbalance.duration() * COMPLETE_TIME_MODIFICATOR;
         if (currentTime - currentImbalance.getEndTime() > Math.max(completeTime, MIN_COMPLETE_TIME)) {
             log.info("Imbalance completed", currentTime);
-            currentState = State.COMPLETED;
+            currentState.set(State.COMPLETED);
             if (callback != null)
-                callback.notifyImbalanceStateUpdate(currentTime, currentState, currentImbalance);
+                callback.notifyImbalanceStateUpdate(currentTime, currentState.get(), currentImbalance);
             return true;
         }
         log.debug("Imbalance is not completed");
@@ -396,9 +397,9 @@ public class ImbalanceService implements VolatilityCallback, MarketDataCallback 
     private void resetImbalanceState() {
         log.info("Resetting state to initial.");
         currentImbalance = null;
-        currentState = State.WAIT;
+        currentState.set(State.WAIT);
         if (callback != null)
-            callback.notifyImbalanceStateUpdate(0, currentState, null);
+            callback.notifyImbalanceStateUpdate(0, currentState.get(), null);
     }
 
     private ImbalanceStateCallback callback;
@@ -434,7 +435,7 @@ public class ImbalanceService implements VolatilityCallback, MarketDataCallback 
                 """,
                 priceChangeThreshold,
                 speedThreshold,
-                currentState,
+                currentState.get(),
                 currentImbalance,
                 snapshotSeconds,
                 snapshotLargeData,
