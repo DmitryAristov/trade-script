@@ -61,22 +61,8 @@ public class TradeHandler implements OrderBookCallback {
         double maxPrice = Double.MIN_VALUE;
         double volume = 0;
 
-        double maxAllowedPrice = 0.;
-        double minAllowedPrice = Double.MAX_VALUE;
-        if (!asks.isEmpty()) {
-            maxAllowedPrice = Collections.min(asks.keySet()) * (1 + PRICE_DEVIATION_THRESHOLD);
-        }
-        if (!bids.isEmpty()) {
-            minAllowedPrice = Collections.max(bids.keySet()) * (1 - PRICE_DEVIATION_THRESHOLD);
-        }
-
         for (JSONObject trade : processingQueue) {
             double price = Double.parseDouble(trade.getString("p"));
-            if (price > maxAllowedPrice || price < minAllowedPrice) {
-                log.warn("Fair price got: " + price + ", time: " + openTime + ". Ignoring...");
-                continue;
-            }
-
             if (price > 0) {
                 minPrice = Math.min(minPrice, price);
                 maxPrice = Math.max(maxPrice, price);
