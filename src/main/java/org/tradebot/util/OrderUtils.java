@@ -5,15 +5,14 @@ import org.tradebot.domain.Imbalance;
 import org.tradebot.domain.Order;
 import org.tradebot.domain.Position;
 
-import static org.tradebot.service.TradingBot.STOP_LOSS_MULTIPLIER;
-import static org.tradebot.service.TradingBot.TAKE_PROFIT_THRESHOLDS;
+import static org.tradebot.util.Settings.*;
 
 public class OrderUtils {
-    public static final String OPEN_POSITION_CLIENT_ID_PREFIX = "position_open_order_";
-    public static final String STOP_CLIENT_ID_PREFIX = "stop_";
-    public static final String TAKE_CLIENT_ID_PREFIX = "take_";
-    public static final String BREAK_EVEN_STOP_CLIENT_ID_PREFIX = "breakeven_stop_";
-    private final Log log = new Log();
+    private final Log log;
+
+    public OrderUtils(int clientNumber) {
+        this.log = new Log(clientNumber);
+    }
 
     public Order createOpen(String symbol,
                             @NotNull Imbalance imbalance,
@@ -28,29 +27,33 @@ public class OrderUtils {
         }
         open.setQuantity(quantity);
         open.setCreateTime(System.currentTimeMillis());
-        open.setNewClientOrderId(OPEN_POSITION_CLIENT_ID_PREFIX + System.currentTimeMillis());
-        log.info("Open position order created: " + open.getNewClientOrderId());
+        open.setNewClientOrderId(OPEN_POSITION_CLIENT_ID_KEY);
+        log.info("Open position order created: " + open);
         return open;
     }
 
-    public Order createTake(String symbol,
-                            @NotNull Position position,
-                            double imbalanceSize,
-                            int number) {
-        Order take = new Order();
-        take.setSymbol(symbol);
-        take.setType(Order.Type.LIMIT);
-        take.setReduceOnly(true);
-        double fullPosition = Math.abs(position.getPositionAmt());
-        double halfPosition = Math.abs(position.getPositionAmt()) * 0.5;
-        if (number == 0) {
-            take.setQuantity(halfPosition);
-        } else {
-            double secondQuantity = fullPosition - Order.getBigDecimalQuantity(halfPosition).doubleValue();
-            take.setQuantity(secondQuantity);
-        }
-        take.setTimeInForce(Order.TimeInForce.GTC);
+    public Order createFirstTake(String symbol, @NotNull Position position, double imbalanceSize) {
+        Order take = createTake(symbol);
+        take.setQuantity(Math.abs(position.getPositionAmt()) * 0.5);
+        setPriceAndSide(take, 0, position, imbalanceSize);
+        take.setNewClientOrderId(TAKE_CLIENT_ID_PREFIX + 0);
 
+        log.info("First take profit order created: " + take);
+        return take;
+    }
+
+    public Order createSecondTake(String symbol, @NotNull Position position, double imbalanceSize) {
+        Order take = createTake(symbol);
+        double fullPosition = Math.abs(position.getPositionAmt());
+        take.setQuantity(fullPosition - Order.getBigDecimalQuantity(fullPosition * 0.5).doubleValue());
+        setPriceAndSide(take, 1, position, imbalanceSize);
+        take.setNewClientOrderId(TAKE_CLIENT_ID_PREFIX + 1);
+
+        log.info("Second take profit order created: " + take);
+        return take;
+    }
+
+    private void setPriceAndSide(Order take, int number, Position position, double imbalanceSize) {
         switch (position.getType()) {
             case SHORT -> {
                 take.setSide(Order.Side.BUY);
@@ -61,9 +64,16 @@ public class OrderUtils {
                 take.setPrice(position.getEntryPrice() + TAKE_PROFIT_THRESHOLDS[number] * imbalanceSize);
             }
         }
+
+    }
+
+    private Order createTake(String symbol) {
+        Order take = new Order();
+        take.setSymbol(symbol);
+        take.setType(Order.Type.LIMIT);
+        take.setReduceOnly(true);
+        take.setTimeInForce(Order.TimeInForce.GTC);
         take.setCreateTime(System.currentTimeMillis());
-        take.setNewClientOrderId(TAKE_CLIENT_ID_PREFIX + number + "_" + System.currentTimeMillis());
-        log.info(number + " take profit order created: " + take.getNewClientOrderId());
         return take;
     }
 
@@ -86,8 +96,8 @@ public class OrderUtils {
             }
         }
         stop.setCreateTime(System.currentTimeMillis());
-        stop.setNewClientOrderId(STOP_CLIENT_ID_PREFIX + System.currentTimeMillis());
-        log.info("Stop loss order created: " + stop.getNewClientOrderId());
+        stop.setNewClientOrderId(STOP_CLIENT_ID_KEY);
+        log.info("Stop loss order created: " + stop);
         return stop;
     }
 
@@ -96,27 +106,35 @@ public class OrderUtils {
         Order breakEven = new Order();
         breakEven.setSymbol(symbol);
         breakEven.setType(Order.Type.STOP_MARKET);
-        breakEven.setStopPrice(position.getBreakEvenPrice());
+        //TODO
+        breakEven.setStopPrice(position.getEntryPrice());
         breakEven.setClosePosition(true);
         breakEven.setSide(switch (position.getType()) {
             case SHORT -> Order.Side.BUY;
             case LONG -> Order.Side.SELL;
         });
         breakEven.setCreateTime(System.currentTimeMillis());
-        breakEven.setNewClientOrderId(BREAK_EVEN_STOP_CLIENT_ID_PREFIX + System.currentTimeMillis());
-        log.info("Break-even stop order created: " + breakEven.getNewClientOrderId());
+        breakEven.setNewClientOrderId(BREAK_EVEN_STOP_CLIENT_ID_KEY);
+        log.info("Break-even stop order created: " + breakEven);
         return breakEven;
     }
 
-    public Order createClosePositionOrder(String symbol,
-                                          String clientId) {
+    public Order createClosePosition(String symbol,
+                                     String clientId,
+                                     Position position) {
         Order close = new Order();
         close.setSymbol(symbol);
         close.setType(Order.Type.MARKET);
         close.setReduceOnly(true);
         close.setCreateTime(System.currentTimeMillis());
         close.setNewClientOrderId(clientId);
-        log.info("Close position order created: " + close.getNewClientOrderId());
+
+        close.setQuantity(Math.abs(position.getPositionAmt()));
+        close.setSide(switch (position.getType()) {
+            case SHORT -> Order.Side.BUY;
+            case LONG -> Order.Side.SELL;
+        });
+        log.info("Close position order created: " + close);
         return close;
     }
 }

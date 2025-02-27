@@ -12,7 +12,6 @@ public class Main {
             "/home/dmitriy/.m2/repository/org/jetbrains/annotations/13.0/annotations-13.0.jar org.tradebot.Main";
 
     public static void main(String[] args) {
-        TradingBot bot = TradingBot.createBot("BTCUSDT", 10);
-        bot.start();
+        TradingBot.getInstance().start();
     }
 }

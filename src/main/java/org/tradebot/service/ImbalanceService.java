@@ -12,7 +12,7 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 
-import static org.tradebot.service.TradingBot.*;
+import static org.tradebot.util.Settings.*;
 
 public class ImbalanceService implements VolatilityCallback, MarketDataCallback {
 
@@ -23,22 +23,33 @@ public class ImbalanceService implements VolatilityCallback, MarketDataCallback 
         COMPLETED
     }
 
-    private final Log log = new Log("imbalance_service");
+    private final Log log = new Log("imbalance_service/");
 
     protected double priceChangeThreshold, speedThreshold;
-    protected AtomicReference<State> currentState = new AtomicReference<>(State.WAIT);
+    protected final AtomicReference<State> currentState = new AtomicReference<>(State.WAIT);
     protected Imbalance currentImbalance = null;
 
     private final TreeMap<Long, MarketEntry> seconds = new TreeMap<>();
     private final TreeMap<Long, MarketEntry> largeData = new TreeMap<>();
     private final LinkedList<Imbalance> imbalances = new LinkedList<>();
 
+    private final List<ImbalanceStateCallback> callbacks = new ArrayList<>();
+
     private double currentMinuteHigh = 0.;
     private double currentMinuteLow = Double.MAX_VALUE;
     private double currentMinuteVolume = 0;
     private long lastMinuteTimestamp = -1L;
 
-    public ImbalanceService() {  }
+    private static ImbalanceService instance;
+
+    public static ImbalanceService getInstance() {
+        if (instance == null) {
+            instance = new ImbalanceService();
+        }
+        return instance;
+    }
+
+    private ImbalanceService() {  }
 
     @Override
     public void notifyNewMarketEntry(long currentTime, MarketEntry currentEntry) {
@@ -49,14 +60,13 @@ public class ImbalanceService implements VolatilityCallback, MarketDataCallback 
                 case WAIT -> handleWaitState(currentTime, currentEntry);
                 case PROGRESS -> trackImbalanceProgress(currentTime, currentEntry);
                 case POTENTIAL_END_POINT -> evaluatePossibleEndPoint(currentTime, currentEntry);
-                case COMPLETED -> saveCompletedImbalanceAndResetState();
+                case COMPLETED -> saveCompletedImbalanceAndResetState(currentEntry);
             }
         } catch (Exception e) {
             log.error("Failed to handle market price update", e);
         }
     }
 
-    public static long simulationOpenTime = System.currentTimeMillis() + 60_000L;
     /**
      * Идем по секундным данным со свежих назад.
      * Находим первый имбаланс.
@@ -65,28 +75,10 @@ public class ImbalanceService implements VolatilityCallback, MarketDataCallback 
      * Потом из них находим с самой большой скоростью изменения цены.
      */
     private void handleWaitState(long currentTime, MarketEntry currentEntry) {
-        // start generation random entry points
-//        if (TEST_RUN) {
-//            if (System.currentTimeMillis() > simulationOpenTime) {
-//                simulationOpenTime = System.currentTimeMillis() + 30_000L;
-//
-//                double imbalanceSize = new Random().nextDouble(1000., 3000.);
-//                double imbalanceStartPrice = currentEntry.low() + imbalanceSize;
-//                double imbalanceEndPrice = currentEntry.low() - new Random().nextDouble(10., imbalanceSize * MAX_VALID_IMBALANCE_PART);
-//                long imbalanceEndTime = currentTime - new Random().nextLong(MIN_POTENTIAL_COMPLETE_TIME, 10000L);
-//                long imbalanceStartTime = new Random().nextLong(MIN_IMBALANCE_TIME_DURATION, Math.round(imbalanceEndTime - imbalanceSize / speedThreshold));
-//
-//                currentImbalance = new Imbalance(imbalanceStartTime, imbalanceStartPrice, imbalanceEndTime, imbalanceEndPrice, Imbalance.Type.DOWN);
-//                currentState = State.PROGRESS;
-//
-//                log.info("Simulating imbalance in progress..." + currentImbalance);
-//                if (callback != null)
-//                    callback.notifyImbalanceStateUpdate(currentTime, currentState, currentImbalance);
-//                return;
-//            }
-//            return;
-//        }
-        // end generation random entry points
+        if (TEST_RUN) {
+            simulateImbalance(currentTime, currentEntry);
+            return;
+        }
 
         Imbalance detectedImbalance = findImbalance(currentTime, currentEntry);
         if (detectedImbalance != null) {
@@ -181,8 +173,8 @@ public class ImbalanceService implements VolatilityCallback, MarketDataCallback 
             log.debug(String.format("Found the best one: %s", currentImbalance));
             log.info("Changing state to PROGRESS");
             currentState.set(State.PROGRESS);
-            if (callback != null)
-                callback.notifyImbalanceStateUpdate(currentTime, currentState.get(), currentImbalance);
+            callbacks.parallelStream().forEach(callback ->
+                    callback.notifyImbalanceStateUpdate(currentTime, currentEntry, currentState.get(), currentImbalance));
         } else {
             log.debug("Valid imbalance not found");
         }
@@ -231,30 +223,30 @@ public class ImbalanceService implements VolatilityCallback, MarketDataCallback 
         if (checkProgressCondition(currentTime, currentEntry)) {
             return;
         }
-        if (checkCompleteCondition(currentTime)) {
+        if (checkCompleteCondition(currentTime, currentEntry)) {
             return;
         }
 
         if (checkPotentialEndPointCondition(currentTime, currentEntry)) {
             currentState.set(State.POTENTIAL_END_POINT);
-            if (callback != null)
-                callback.notifyImbalanceStateUpdate(currentTime, currentState.get(), currentImbalance);
+            callbacks.parallelStream().forEach(callback ->
+                    callback.notifyImbalanceStateUpdate(currentTime, currentEntry, currentState.get(), currentImbalance));
         }
     }
 
     private boolean checkProgressCondition(long currentTime, MarketEntry currentEntry) {
         log.debug("Checking progress...");
-//        if (TEST_RUN) {
-//            return false;
-//        }
+        if (TEST_RUN) {
+            return false;
+        }
         switch (currentImbalance.getType()) {
             case UP -> {
                 if (currentEntry.high() > currentImbalance.getEndPrice()) {
                     currentImbalance.setEndPrice(currentEntry.high());
                     currentImbalance.setEndTime(currentTime);
                     currentState.set(State.PROGRESS);
-                    if (callback != null)
-                        callback.notifyImbalanceStateUpdate(currentTime, currentState.get(), currentImbalance);
+                    callbacks.parallelStream().forEach(callback ->
+                            callback.notifyImbalanceStateUpdate(currentTime, currentEntry, currentState.get(), currentImbalance));
                     log.debug("Imbalance is in progress");
                     return true;
                 }
@@ -264,8 +256,8 @@ public class ImbalanceService implements VolatilityCallback, MarketDataCallback 
                     currentImbalance.setEndPrice(currentEntry.low());
                     currentImbalance.setEndTime(currentTime);
                     currentState.set(State.PROGRESS);
-                    if (callback != null)
-                        callback.notifyImbalanceStateUpdate(currentTime, currentState.get(), currentImbalance);
+                    callbacks.parallelStream().forEach(callback ->
+                            callback.notifyImbalanceStateUpdate(currentTime, currentEntry, currentState.get(), currentImbalance));
                     log.debug("Imbalance is in progress");
                     return true;
                 }
@@ -275,17 +267,17 @@ public class ImbalanceService implements VolatilityCallback, MarketDataCallback 
         return false;
     }
 
-    private boolean checkCompleteCondition(long currentTime) {
+    private boolean checkCompleteCondition(long currentTime, MarketEntry currentEntry) {
         log.debug("Checking complete condition...");
-//        if (TEST_RUN) {
-//            return false;
-//        }
+        if (TEST_RUN) {
+            return false;
+        }
         double completeTime = currentImbalance.duration() * COMPLETE_TIME_MODIFICATOR;
         if (currentTime - currentImbalance.getEndTime() > Math.max(completeTime, MIN_COMPLETE_TIME)) {
             log.info("Imbalance completed", currentTime);
             currentState.set(State.COMPLETED);
-            if (callback != null)
-                callback.notifyImbalanceStateUpdate(currentTime, currentState.get(), currentImbalance);
+            callbacks.parallelStream().forEach(callback ->
+                    callback.notifyImbalanceStateUpdate(currentTime, currentEntry, currentState.get(), currentImbalance));
             return true;
         }
         log.debug("Imbalance is not completed");
@@ -294,12 +286,12 @@ public class ImbalanceService implements VolatilityCallback, MarketDataCallback 
 
     public boolean checkPotentialEndPointCondition(long currentTime, MarketEntry currentEntry) {
         log.debug("Checking potential endpoint condition...");
-//        if (TEST_RUN) {
-//            boolean is = currentTime - currentImbalance.getEndTime() > 2000L;
-//            if (is)
-//                log.info("Simulating potential entry point " + is);
-//            return is;
-//        }
+        if (TEST_RUN) {
+            boolean is = currentTime - currentImbalance.getEndTime() > 2000L;
+            if (is)
+                log.info("Simulating potential entry point");
+            return is;
+        }
         double relevantSize = currentImbalance.size() / priceChangeThreshold;
         double possibleDuration = currentImbalance.duration() / relevantSize * POTENTIAL_COMPLETE_TIME_MODIFICATOR;
         if (currentTime - currentImbalance.getEndTime() < Math.max(possibleDuration, MIN_POTENTIAL_COMPLETE_TIME)) {
@@ -334,19 +326,19 @@ public class ImbalanceService implements VolatilityCallback, MarketDataCallback 
     }
 
     private void evaluatePossibleEndPoint(long currentTime, MarketEntry currentEntry) {
-//        if (TEST_RUN) {
-//            if (currentTime - currentImbalance.getEndTime() > 20000L) {
-//                currentState = State.COMPLETED;
-//                log.info("Simulating completed imbalance...");
-//                if (callback != null)
-//                    callback.notifyImbalanceStateUpdate(currentTime, currentState, currentImbalance);
-//            }
-//            return;
-//        }
+        if (TEST_RUN) {
+            if (currentTime - currentImbalance.getEndTime() > 20000L) {
+                currentState.set(State.COMPLETED);
+                log.info("Simulating completed imbalance...");
+                callbacks.parallelStream().forEach(callback ->
+                        callback.notifyImbalanceStateUpdate(currentTime, currentEntry, currentState.get(), currentImbalance));
+            }
+            return;
+        }
         if (checkProgressCondition(currentTime, currentEntry)) {
             return;
         }
-        checkCompleteCondition(currentTime);
+        checkCompleteCondition(currentTime, currentEntry);
     }
 
     private void updateData(long currentTime, MarketEntry currentEntry) {
@@ -389,62 +381,105 @@ public class ImbalanceService implements VolatilityCallback, MarketDataCallback 
         this.speedThreshold = average * SPEED_MODIFICATOR;
     }
 
-    private void saveCompletedImbalanceAndResetState() {
+    private void saveCompletedImbalanceAndResetState(MarketEntry currentEntry) {
         imbalances.add(currentImbalance);
-        resetImbalanceState();
+        resetImbalanceState(currentEntry);
     }
 
-    private void resetImbalanceState() {
+    private void resetImbalanceState(MarketEntry currentEntry) {
         log.info("Resetting state to initial.");
         currentImbalance = null;
         currentState.set(State.WAIT);
-        if (callback != null)
-            callback.notifyImbalanceStateUpdate(0, currentState.get(), null);
+        callbacks.parallelStream().forEach(callback ->
+                callback.notifyImbalanceStateUpdate(0, currentEntry, currentState.get(), null));
     }
 
-    private ImbalanceStateCallback callback;
-
-    public void setCallback(ImbalanceStateCallback callback) {
-        this.callback = callback;
+    public void addCallback(ImbalanceStateCallback callback) {
+        callbacks.add(callback);
         log.info(String.format("Callback set: %s", callback.getClass().getName()));
     }
 
-    public void logAll() {
-        Map<Long, MarketEntry> snapshotSeconds;
-        synchronized (seconds) {
-            snapshotSeconds = new TreeMap<>(seconds);
-        }
-        Map<Long, MarketEntry> snapshotLargeData;
-        synchronized (largeData) {
-            snapshotLargeData = new TreeMap<>(largeData);
-        }
+    public void removeCallback(ImbalanceStateCallback callback) {
+        callbacks.remove(callback);
+        log.info(String.format("Callback removed: %s", callback.getClass().getName()));
+    }
 
-        log.debug(String.format("""
-                priceChangeThreshold: %.2f
-                speedThreshold: %.2f
-                currentState: %s
-                currentImbalance: %s
-                seconds: %s
-                largeData: %s
-                currentMinuteHigh: %.2f
-                currentMinuteLow: %.2f
-                currentMinuteVolume: %.2f
-                lastMinuteTimestamp: %d
-                imbalances: %s
-                callback: %s
-                """,
-                priceChangeThreshold,
-                speedThreshold,
-                currentState.get(),
-                currentImbalance,
-                snapshotSeconds,
-                snapshotLargeData,
-                currentMinuteHigh,
-                currentMinuteLow,
-                currentMinuteVolume,
-                lastMinuteTimestamp,
-                imbalances,
-                callback
-        ));
+    public void logAll() {
+        try {
+            Map<Long, MarketEntry> snapshotSeconds;
+            synchronized (seconds) {
+                snapshotSeconds = new TreeMap<>(seconds);
+            }
+            Map<Long, MarketEntry> snapshotLargeData;
+            synchronized (largeData) {
+                snapshotLargeData = new TreeMap<>(largeData);
+            }
+
+            log.debug(String.format("""
+                            priceChangeThreshold: %.2f
+                            speedThreshold: %.2f
+                            currentState: %s
+                            currentImbalance: %s
+                            seconds: %s
+                            largeData: %s
+                            currentMinuteHigh: %.2f
+                            currentMinuteLow: %.2f
+                            currentMinuteVolume: %.2f
+                            lastMinuteTimestamp: %d
+                            imbalances: %s
+                            callback: %s
+                            """,
+                    priceChangeThreshold,
+                    speedThreshold,
+                    currentState.get(),
+                    currentImbalance,
+                    snapshotSeconds,
+                    snapshotLargeData,
+                    currentMinuteHigh,
+                    currentMinuteLow,
+                    currentMinuteVolume,
+                    lastMinuteTimestamp,
+                    imbalances,
+                    callbacks
+            ));
+        } catch (Exception e) {
+            log.warn("Failed to write", e);
+        }
+    }
+
+    public static long simulationOpenTime = System.currentTimeMillis() + 60_000L;
+    public static long simulationImbalancesCount = 0;
+    private void simulateImbalance(long currentTime, MarketEntry currentEntry) {
+        if (System.currentTimeMillis() > simulationOpenTime) {
+            Random random = new Random();
+            simulationImbalancesCount++;
+            simulationOpenTime = System.currentTimeMillis() + 30_000L;
+
+            double imbalanceSize = random.nextDouble(400., 1000.);
+            double imbalanceStartPrice;
+            double imbalanceEndPrice;
+            Imbalance.Type type;
+            long imbalanceEndTime = currentTime - random.nextLong(MIN_POTENTIAL_COMPLETE_TIME, 10000L);
+            long imbalanceStartTime = random.nextLong(MIN_IMBALANCE_TIME_DURATION, Math.round(imbalanceEndTime - imbalanceSize / speedThreshold));
+            double endPriceDiff = random.nextDouble(10., imbalanceSize * MAX_VALID_IMBALANCE_PART);
+            if (simulationOpenTime % 2 == 0) {
+                imbalanceStartPrice = currentEntry.low() + imbalanceSize;
+                imbalanceEndPrice = currentEntry.low() - endPriceDiff;
+                type = Imbalance.Type.DOWN;
+            } else {
+                imbalanceStartPrice = currentEntry.high() - imbalanceSize;
+                imbalanceEndPrice = currentEntry.high() + endPriceDiff;
+                type = Imbalance.Type.UP;
+            }
+
+            currentImbalance = new Imbalance(imbalanceStartTime, imbalanceStartPrice,
+                    imbalanceEndTime, imbalanceEndPrice, type);
+            currentState.set(State.PROGRESS);
+
+            log.info("Simulating imbalance in progress..." + currentImbalance);
+            //TODO run foreach at the same time
+            callbacks.parallelStream().forEach(callback ->
+                    callback.notifyImbalanceStateUpdate(currentTime, currentEntry, currentState.get(), currentImbalance));
+        }
     }
 }

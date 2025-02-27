@@ -1,18 +1,13 @@
 package org.tradebot.util;
 
+import org.jetbrains.annotations.Nullable;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.tradebot.domain.*;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.TreeMap;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-
-import static org.tradebot.service.TradingBot.BASE_ASSET;
-import static org.tradebot.service.TradingBot.RISK_LEVEL;
 
 public class JsonParser {
 
@@ -106,16 +101,44 @@ public class JsonParser {
                 Double.parseDouble(account.getString("totalWalletBalance")));
     }
 
-    public static double parseBalance(String value) {
+    public static double parseBalance(String value, String baseAsset) {
         double result = 0.;
         JSONArray jsonArray = new JSONArray(value);
         for (int i = 0; i < jsonArray.length(); i++) {
             JSONObject asset = jsonArray.getJSONObject(i);
-            if (BASE_ASSET.equals(asset.getString("asset"))) {
+            if (baseAsset.equals(asset.getString("asset"))) {
                 result = Double.parseDouble(jsonArray.getJSONObject(i).getString("availableBalance"));
             }
         }
-        return result * RISK_LEVEL;
+        return result;
+    }
+
+    public static double parseBalance(JSONArray balanceUpdates, String baseAsset) {
+        double balance = 0.;
+        for (int i = 0; i < balanceUpdates.length(); i++) {
+            JSONObject update = balanceUpdates.getJSONObject(i);
+            if (baseAsset.equals(update.getString("a"))) {
+                balance = Double.parseDouble(update.getString("wb"));
+                break;
+            }
+        }
+        return balance;
+    }
+
+    public static @Nullable Position parsePosition(JSONObject positionUpdate) {
+        Position position = new Position();
+        double entryPrice = Double.parseDouble(positionUpdate.getString("ep"));
+        if (entryPrice == 0)
+            return null;
+        double positionAmount = Double.parseDouble(positionUpdate.getString("pa"));
+        if (positionAmount == 0)
+            return null;
+
+        position.setSymbol(positionUpdate.getString("s"));
+        position.setEntryPrice(entryPrice);
+        position.setPositionAmt(positionAmount);
+        position.setBreakEvenPrice(Double.parseDouble(positionUpdate.getString("bep")));
+        return position;
     }
 
     public static Integer parseLeverage(String value) {
@@ -187,5 +210,17 @@ public class JsonParser {
     public static APIError parseAPIError(String error) {
         JSONObject errorJson = new JSONObject(error);
         return new APIError(errorJson.getInt("code"), errorJson.getString("msg"));
+    }
+
+    public static String parseAPIError(APIError error) {
+        return new JSONObject(error.toString()).toString(4);
+    }
+
+    public static String parseException(Exception e) {
+        JSONObject result = new JSONObject();
+        result.put("message", e.getMessage());
+        result.put("class", e.getClass());
+        result.put("stacktrace", Arrays.toString(e.getStackTrace()));
+        return result.toString(4);
     }
 }

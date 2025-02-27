@@ -35,10 +35,6 @@ public class Position {
         this.positionAmt = positionAmt;
     }
 
-    public double getBreakEvenPrice() {
-        return breakEvenPrice;
-    }
-
     public void setBreakEvenPrice(double breakEvenPrice) {
         this.breakEvenPrice = breakEvenPrice;
     }

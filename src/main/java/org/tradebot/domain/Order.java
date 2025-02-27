@@ -6,7 +6,7 @@ import org.tradebot.util.TimeFormatter;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 
-import static org.tradebot.service.TradingBot.DEFAULT_PRECISION;
+import static org.tradebot.util.Settings.DEFAULT_PRECISION;
 
 public class Order {
 
@@ -61,10 +61,6 @@ public class Order {
     private Status status;
     
     public Order() { }
-
-    public Long getId() {
-        return id;
-    }
 
     public void setId(Long id) {
         this.id = id;
@@ -136,10 +132,6 @@ public class Order {
 
     public void setCreateTime(Long createTime) {
         this.createTime = createTime;
-    }
-
-    public Long getCreateTime() {
-        return createTime;
     }
 
     public Boolean isClosePosition() {

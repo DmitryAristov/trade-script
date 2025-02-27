@@ -1,6 +1,6 @@
 package org.tradebot.service;
 
-import org.tradebot.binance.APIService;
+import org.tradebot.binance.PublicAPIService;
 import org.tradebot.domain.MarketEntry;
 import org.tradebot.listener.VolatilityCallback;
 import org.tradebot.util.Log;
@@ -10,23 +10,29 @@ import java.util.List;
 import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
 
-import static org.tradebot.service.TradingBot.*;
+import static org.tradebot.util.Settings.*;
 
 public class VolatilityService {
 
-    public static final String VOLATILITY_UPDATE_TASK_KEY = "volatility_update";
     private final Log log = new Log();
 
-    private final APIService apiService;
-    private final TaskManager taskManager;
-    private final String symbol;
+    private final PublicAPIService publicAPIService;
     private VolatilityCallback callback;
 
-    public VolatilityService(String symbol, APIService apiService, TaskManager taskManager) {
-        this.apiService = apiService;
-        this.taskManager = taskManager;
-        this.symbol = symbol;
-        this.taskManager.scheduleAtFixedRate(VOLATILITY_UPDATE_TASK_KEY, this::updateVolatility, 0, UPDATE_TIME_PERIOD_HOURS, TimeUnit.HOURS);
+    private static VolatilityService instance;
+
+    public static VolatilityService getInstance() {
+        if (instance == null) {
+            instance = new VolatilityService();
+        }
+        return instance;
+    }
+
+    private VolatilityService() {
+        this.publicAPIService = PublicAPIService.getInstance();
+        TaskManager.getInstance().scheduleAtFixedRate(VOLATILITY_UPDATE_TASK_KEY,
+                this::updateVolatility, 0, UPDATE_TIME_PERIOD_HOURS, TimeUnit.HOURS);
+
         log.info("VolatilityService started successfully.");
     }
 
@@ -47,8 +53,7 @@ public class VolatilityService {
         TreeMap<Long, MarketEntry> marketData = fetchMarketData("15m", VOLATILITY_CALCULATE_PAST_TIME_DAYS);
 
         if (marketData.size() < 2) {
-            log.warn("Insufficient market data for volatility calculation.");
-            return 0.0;
+            throw log.throwError("Insufficient market data for volatility calculation.");
         }
 
         List<Double> changes = new ArrayList<>();
@@ -68,8 +73,7 @@ public class VolatilityService {
         TreeMap<Long, MarketEntry> marketData = fetchMarketData("15m", AVERAGE_PRICE_CALCULATE_PAST_TIME_DAYS);
 
         if (marketData.size() < 2) {
-            log.warn("Insufficient market data for average price calculation.");
-            return 0.0;
+            throw log.throwError("Insufficient market data for average price calculation.");
         }
 
         double sum = marketData.values().stream().mapToDouble(MarketEntry::average).sum();
@@ -80,8 +84,8 @@ public class VolatilityService {
 
     private TreeMap<Long, MarketEntry> fetchMarketData(String interval, int days) {
         int requiredEntries = days * 24 * 60 / 15;
-        log.debug(String.format("Fetching market data for symbol: %s, interval: %s, required entries: %d", symbol, interval, requiredEntries));
-        TreeMap<Long, MarketEntry> marketData = apiService.getMarketDataPublicAPI(symbol, interval, requiredEntries).getResponse();
+        log.debug(String.format("Fetching market data for symbol: %s, interval: %s, required entries: %d", SYMBOL, interval, requiredEntries));
+        TreeMap<Long, MarketEntry> marketData = publicAPIService.getMarketDataPublicAPI(SYMBOL, interval, requiredEntries).getResponse();
         log.debug(String.format("Fetched %d market entries.", marketData.size()));
         return marketData;
     }
@@ -92,10 +96,14 @@ public class VolatilityService {
     }
 
     public void logAll() {
-        log.debug(String.format("""
-                        VolatilityService state:
-                            Symbol: %s
-                            Callback: %s
-                        """, symbol, callback));
+        try {
+            log.debug(String.format("""
+                    VolatilityService state:
+                        Symbol: %s
+                        Callback: %s
+                    """, SYMBOL, callback));
+        } catch (Exception e) {
+            log.warn("Failed to write", e);
+        }
     }
 }

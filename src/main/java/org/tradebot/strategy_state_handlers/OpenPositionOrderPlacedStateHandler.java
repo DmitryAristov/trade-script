@@ -1,45 +1,45 @@
-package org.tradebot.service.strategy_state_handlers;
+package org.tradebot.strategy_state_handlers;
 
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.tradebot.binance.APIService;
 import org.tradebot.domain.Order;
 import org.tradebot.domain.Position;
 import org.tradebot.service.OrderManager;
-import org.tradebot.service.OrderManager.OrderType;
 import org.tradebot.util.Log;
 
 import java.util.List;
 
-public class OpenPositionOrderPlacedStateHandler implements StateHandler {
-    private final Log log = new Log();
+import static org.tradebot.util.Settings.SYMBOL;
 
+public class OpenPositionOrderPlacedStateHandler implements StateHandler {
+
+    private final Log log;
     private final APIService apiService;
     private final OrderManager orderManager;
-    private final String symbol;
 
     public OpenPositionOrderPlacedStateHandler(APIService apiService,
                                                OrderManager orderManager,
-                                               String symbol) {
+                                               int clientNumber) {
         this.apiService = apiService;
         this.orderManager = orderManager;
-        this.symbol = symbol;
+        this.log = new Log(clientNumber);
         log.info("OpenPositionOrderPlacedStateHandler initialized");
     }
 
     @Override
     public void handle(@Nullable Position position, List<Order> openedOrders) {
+        orderManager.notifyPositionUpdate(position);
         if (position == null) {
             handleEmptyPosition();
         } else {
-            handleNonEmptyPosition(position);
+            handleNonEmptyPosition();
         }
     }
 
     private void handleEmptyPosition() {
         log.info("Position is empty in OPEN_ORDER_PLACED state. Checking open position order status...");
         String reason;
-        if (orderManager.getOrders().containsKey(OrderType.OPEN)) {
+        if (orderManager.getOrders().containsKey(OrderManager.OrderType.OPEN)) {
             Order openOrder = queryOpenOrder();
             if (openOrder == null) {
                 reason ="Open position order not found.";
@@ -53,13 +53,13 @@ public class OpenPositionOrderPlacedStateHandler implements StateHandler {
         } else {
             reason = "Open position order not found in local orders.";
         }
-        resetToEmptyPosition(null, reason);
+        resetToEmptyPosition(reason);
     }
 
-    private void handleNonEmptyPosition(@NotNull Position position) {
+    private void handleNonEmptyPosition() {
         log.info("Position is not empty in OPEN_ORDER_PLACED state. Validating open position order...");
         String reason;
-        if (orderManager.getOrders().containsKey(OrderType.OPEN)) {
+        if (orderManager.getOrders().containsKey(OrderManager.OrderType.OPEN)) {
             Order openOrder = queryOpenOrder();
             if (openOrder == null) {
                 reason = "Open position order not found.";
@@ -67,7 +67,7 @@ public class OpenPositionOrderPlacedStateHandler implements StateHandler {
                 switch (openOrder.getStatus()) {
                     case FILLED -> {
                         log.info("Open position order has been FILLED. Switching state to POSITION_OPENED...");
-                        orderManager.handleOpenOrderFilled(position);
+                        orderManager.setState(OrderManager.State.OPEN_ORDER_FILLED);
                         return;
                     }
                     case PARTIALLY_FILLED -> {
@@ -80,26 +80,26 @@ public class OpenPositionOrderPlacedStateHandler implements StateHandler {
             }
         } else {
             log.warn("Open position order not found in local orders. Assume it is filled already. Switching state to POSITION_OPENED...");
-            orderManager.handleOpenOrderFilled(position);
+            orderManager.setState(OrderManager.State.OPEN_ORDER_FILLED);
             return;
         }
-        resetToEmptyPosition(position, reason);
+        resetToEmptyPosition(reason);
     }
 
     private @Nullable Order queryOpenOrder() {
-        String orderId = orderManager.getOrders().get(OrderType.OPEN);
-        if (orderId == null) {
-            log.warn("Open position order ID is null.");
+        Order order = orderManager.getOrders().get(OrderManager.OrderType.OPEN);
+        if (order == null) {
+            log.warn("Open position order is null.");
             return null;
         }
 
-        log.info(String.format("Querying open position order: %s", orderId));
-        return apiService.queryOrder(symbol, orderId).getResponse();
+        log.info(String.format("Querying open position order: %s", order));
+        return apiService.queryOrder(SYMBOL, order.getNewClientOrderId()).getResponse();
     }
 
-    private void resetToEmptyPosition(@Nullable Position position, String reason) {
+    private void resetToEmptyPosition(String reason) {
         log.warn(reason);
         log.debug(String.format("Local orders: %s", orderManager.getOrders()));
-        orderManager.resetToEmptyPosition(position);
+        orderManager.closePositionAndResetState();
     }
 }

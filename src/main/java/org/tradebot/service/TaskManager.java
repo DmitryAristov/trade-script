@@ -7,11 +7,39 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class TaskManager {
-    private final Log log = new Log();
+    private static final Map<Integer, TaskManager> instances = new ConcurrentHashMap<>();
+    private static TaskManager mainInstance = null;
 
-    protected final Map<String, ScheduledExecutorService> executors = new ConcurrentHashMap<>();
-    private final Map<String, State> states = new ConcurrentHashMap<>();
-    private final Map<String, Long> periods = new ConcurrentHashMap<>();
+    private final Log log;
+    private final Map<String, ScheduledExecutorService> executors;
+    private final Map<String, State> states;
+
+
+    private TaskManager() {
+        this.log = new Log();
+        this.executors = new ConcurrentHashMap<>();
+        this.states = new ConcurrentHashMap<>();
+    }
+
+    private TaskManager(int clientNumber) {
+        this.log = new Log(clientNumber);
+        this.executors = new ConcurrentHashMap<>();
+        this.states = new ConcurrentHashMap<>();
+    }
+
+    public static TaskManager getInstance() {
+        if (mainInstance == null) {
+            mainInstance = new TaskManager();
+        }
+        return mainInstance;
+    }
+
+    public static TaskManager getInstance(int clientNumber) {
+        if (!instances.containsKey(clientNumber)) {
+            instances.put(clientNumber, new TaskManager(clientNumber));
+        }
+        return instances.get(clientNumber);
+    }
 
     public void scheduleAtFixedRate(String taskId, Runnable task, long delay, long period, TimeUnit timeUnit) {
         cancel(taskId);
@@ -31,7 +59,6 @@ public class TaskManager {
         log.info(String.format("Task '%s' scheduled to run every %d %s and start after %d %s", taskId, period, timeUnit, delay, timeUnit),
                 System.currentTimeMillis() + timeUnit.toMillis(delay));
         states.put(taskId, state);
-        periods.put(taskId, period);
         executors.put(taskId, executor);
     }
 
@@ -89,14 +116,28 @@ public class TaskManager {
         }
     }
 
+    public void cancelForce(String taskId) {
+        try (ScheduledExecutorService executor = executors.remove(taskId)) {
+            State taskState = states.remove(taskId);
+            if (taskState != null) {
+                log.debug(String.format("Task '%s' is not running, set cancel flag and shutdown", taskId));
+                taskState.cancel();
+                if (executor != null && !executor.isShutdown()) {
+                    executor.shutdownNow();
+                    log.info(String.format("Task '%s' has been cancelled", taskId));
+                }
+            }
+        }
+    }
+
     public void cancelAll() {
         log.info("Cancelling all tasks...");
         executors.forEach((task, _) -> cancel(task));
         log.info("All tasks have been cancelled");
     }
 
-    public long getTaskPeriod(String taskKey) {
-        return periods.getOrDefault(taskKey, -1L);
+    public void runAsync(String taskPrefix, Runnable task) {
+        schedule(taskPrefix, task, 0, TimeUnit.MILLISECONDS);
     }
 
     private static class State {
@@ -131,13 +172,16 @@ public class TaskManager {
     }
 
     public void logAll() {
-        log.debug("TaskManager executors size: " + executors.size());
-        log.debug("TaskManager states size: " + states.size());
-        log.debug(String.format("""
-                        TaskManager:
-                            executors: %s
-                            states: %s
-                        """, executors, states));
-
+        try {
+            log.debug("TaskManager executors size: " + executors.size());
+            log.debug("TaskManager states size: " + states.size());
+            log.debug(String.format("""
+                    TaskManager:
+                        executors: %s
+                        states: %s
+                    """, executors, states));
+        } catch (Exception e) {
+            log.warn("Failed to write", e);
+        }
     }
 }

@@ -1,21 +1,21 @@
-package org.tradebot.service.strategy_state_handlers;
+package org.tradebot.strategy_state_handlers;
 
 import org.jetbrains.annotations.Nullable;
 import org.tradebot.domain.Order;
 import org.tradebot.domain.Position;
 import org.tradebot.service.OrderManager;
-import org.tradebot.service.Strategy;
 import org.tradebot.util.Log;
 
 import java.util.List;
 
 public class EmptyPositionStateHandler implements StateHandler {
-    private final Log log = new Log();
 
+    private final Log log;
     private final OrderManager orderManager;
 
-    public EmptyPositionStateHandler(OrderManager orderManager) {
+    public EmptyPositionStateHandler(OrderManager orderManager, int clientNumber) {
         this.orderManager = orderManager;
+        this.log = new Log(clientNumber);
         log.info("EmptyPositionStateHandler initialized.");
     }
 
@@ -25,7 +25,7 @@ public class EmptyPositionStateHandler implements StateHandler {
             log.info("No active position. System remains in EMPTY_POSITION state.");
         } else {
             log.info(String.format("Position detected: %s. Transitioning to OPEN_ORDER_PLACED state.", position));
-            orderManager.setState(Strategy.State.OPEN_ORDER_PLACED);
+            orderManager.setState(OrderManager.State.OPEN_ORDER_PLACED);
         }
     }
 }

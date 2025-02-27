@@ -1,19 +1,29 @@
 package org.tradebot.binance;
 
-import org.jetbrains.annotations.Nullable;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.tradebot.domain.Position;
 import org.tradebot.listener.UserDataCallback;
+import org.tradebot.service.TaskManager;
 import org.tradebot.util.Log;
 
-public class UserDataHandler {
-    private final Log log = new Log();
-    private final String symbol;
-    protected UserDataCallback callback;
+import java.util.concurrent.TimeUnit;
 
-    public UserDataHandler(String symbol) {
-        this.symbol = symbol;
+import static org.tradebot.util.JsonParser.parseBalance;
+import static org.tradebot.util.JsonParser.parsePosition;
+import static org.tradebot.util.Settings.BALANCE_UPDATE_TASK;
+import static org.tradebot.util.Settings.SYMBOL;
+
+public class UserDataHandler {
+    private final Log log;
+    private UserDataCallback callback;
+    private final String baseAsset;
+    private final int clientNumber;
+
+    public UserDataHandler(int clientNumber, String baseAsset) {
+        this.log = new Log(clientNumber);
+        this.clientNumber = clientNumber;
+        this.baseAsset = baseAsset;
     }
 
     public void onMessage(String eventType, JSONObject message) {
@@ -37,8 +47,13 @@ public class UserDataHandler {
                     if (!validPositionUpdate(positionUpdate))
                         continue;
 
-                    if (callback != null)
-                        callback.notifyPositionUpdate(parsePosition(positionUpdate));
+                    if (callback != null) {
+                        Position position = parsePosition(positionUpdate);
+                        callback.notifyPositionUpdate(position);
+
+                        TaskManager.getInstance(clientNumber).schedule(BALANCE_UPDATE_TASK,
+                                () -> updateBalance(accountUpdate, position), 100, TimeUnit.MILLISECONDS);
+                    }
                     break;
                 }
             }
@@ -46,38 +61,23 @@ public class UserDataHandler {
     }
 
     private boolean validOrderUpdate(JSONObject orderJson) {
-        return this.symbol.toUpperCase().equals(orderJson.getString("s"));
+        return SYMBOL.toUpperCase().equals(orderJson.getString("s"));
     }
 
     private boolean validPositionUpdate(JSONObject positionUpdate) {
         return positionUpdate.has("ps") &&
                 "BOTH".equals(positionUpdate.getString("ps")) &&
                 positionUpdate.has("s") &&
-                symbol.toUpperCase().equals(positionUpdate.getString("s"));
+                SYMBOL.toUpperCase().equals(positionUpdate.getString("s"));
     }
 
-    private static @Nullable Position parsePosition(JSONObject positionUpdate) {
-        Position position = new Position();
-        double entryPrice = Double.parseDouble(positionUpdate.getString("ep"));
-        if (entryPrice == 0)
-            return null;
-        double positionAmount = Double.parseDouble(positionUpdate.getString("pa"));
-        if (positionAmount == 0)
-            return null;
-
-        position.setSymbol(positionUpdate.getString("s"));
-        position.setEntryPrice(entryPrice);
-        position.setPositionAmt(positionAmount);
-        position.setBreakEvenPrice(Double.parseDouble(positionUpdate.getString("bep")));
-        return position;
+    private void updateBalance(JSONObject accountUpdate, Position position) {
+        double walletBalance = parseBalance(accountUpdate.getJSONArray("B"), baseAsset);
+        log.writeAccountUpdateEvent(walletBalance, position);
     }
 
     public void setCallback(UserDataCallback callback) {
         this.callback = callback;
         log.info(String.format("Callback set: %s", callback.getClass().getName()));
-    }
-
-    public void logAll() {
-        log.debug(String.format("callback: %s", callback));
     }
 }

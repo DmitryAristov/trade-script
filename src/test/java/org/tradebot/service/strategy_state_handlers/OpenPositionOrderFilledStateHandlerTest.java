@@ -1,16 +1,11 @@
 package org.tradebot.service.strategy_state_handlers;
 
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 //TODO
-class ClosingOrdersCreatedStateHandlerTest {
-
-    @BeforeEach
-    void setUp() {
-    }
+class OpenPositionOrderFilledStateHandlerTest {
 
     @Test
     void handle() {

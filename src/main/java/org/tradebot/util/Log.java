@@ -1,5 +1,9 @@
 package org.tradebot.util;
 
+import org.jetbrains.annotations.NotNull;
+import org.json.JSONObject;
+import org.tradebot.domain.APIError;
+import org.tradebot.domain.Position;
 import org.tradebot.domain.TradingBotState;
 import org.tradebot.service.TradingBot;
 
@@ -8,12 +12,14 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.File;
 import java.io.RandomAccessFile;
-import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.Objects;
 
+import static org.tradebot.util.JsonParser.parseAPIError;
+import static org.tradebot.util.JsonParser.parseException;
 import static org.tradebot.util.Log.Level.*;
+import static org.tradebot.util.Settings.*;
 
 public class Log {
 
@@ -24,20 +30,27 @@ public class Log {
         ERROR
     }
 
-    public static final String LOGS_DIR_PATH = System.getProperty("user.dir") + "/output/logs/";
-    public static final String STATE_FILE_PATH = System.getProperty("user.dir") + "/output/state/";
-    private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd");
-
     static {
         ensureLogDirectoryExists();
+        ensureLogDirectoryExists(LOGS_DIR_PATH + "debug/");
+        ensureLogDirectoryExists(LOGS_DIR_PATH + "info/");
     }
 
     private String path = null;
+    private Integer clientNumber = null;
 
     public Log() {  }
 
     public Log(String path) {
+        ensureLogDirectoryExists(LOGS_DIR_PATH + path);
         this.path = path;
+    }
+
+    public Log(int clientNumber) {
+        ensureLogDirectoryExists(LOGS_DIR_PATH + "debug/" + clientNumber);
+        ensureLogDirectoryExists(LOGS_DIR_PATH + "info/" + clientNumber);
+        ensureLogDirectoryExists(STATE_FILE_PATH + clientNumber);
+        this.clientNumber = clientNumber;
     }
 
     public void debug(String message) {
@@ -60,6 +73,10 @@ public class Log {
         log(message, WARN);
     }
 
+    public void warn(String message, Exception exception) {
+        log(getThrowableMessage(message, exception), WARN);
+    }
+
     public void error(String message) {
         log(message, ERROR);
     }
@@ -75,12 +92,16 @@ public class Log {
     }
 
     public void error(String message, Exception exception) {
-        log(exception.getClass() + ": " + message + ", caused by :: " +
-                        exception.getMessage() +
-                        Arrays.stream(exception.getStackTrace())
-                                .map(StackTraceElement::toString)
-                                .reduce("", (s1, s2) -> s1 + "\n    at " + s2),
-                ERROR);
+        log(getThrowableMessage(message, exception), ERROR);
+    }
+
+    @NotNull
+    private static String getThrowableMessage(String message, Exception exception) {
+        return exception.getClass() + ": " + message + ", caused by :: " +
+                exception.getMessage() +
+                Arrays.stream(exception.getStackTrace())
+                        .map(StackTraceElement::toString)
+                        .reduce("", (s1, s2) -> s1 + "\n    at " + s2);
     }
 
     public void removeLines(int count) {
@@ -98,7 +119,7 @@ public class Log {
             }
             file.setLength(length + 1);
         } catch (IOException e) {
-            e.printStackTrace();
+            warn("Failed to remove lines", e);
         }
     }
 
@@ -114,10 +135,10 @@ public class Log {
             logEntry += " on " + TimeFormatter.format(mills) + " (" + mills + ")";
         }
 
-        writeLogFile(logEntry, Objects.requireNonNullElse(path, "debug"));
+        writeLogFile(logEntry, Objects.requireNonNullElse(path, "debug/"));
 
         if (level != DEBUG) {
-            writeLogFile(logEntry, "info");
+            writeLogFile(logEntry, "info/");
         }
         if (level == ERROR) {
             TradingBot.getInstance().logAll();
@@ -125,8 +146,13 @@ public class Log {
     }
 
     private void writeLogFile(String logEntry, String filePath) {
-        String dateSuffix = "_" + DATE_FORMAT.format(new Date()) + ".log";
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(LOGS_DIR_PATH + filePath + dateSuffix, true))) {
+        String finalPath = LOGS_DIR_PATH + filePath;
+        if (clientNumber != null) {
+            finalPath += clientNumber + "/";
+        }
+        finalPath += DATE_FORMAT.format(new Date()) + ".log";
+
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(finalPath, true))) {
             writer.write(logEntry);
             writer.newLine();
         } catch (IOException e) {
@@ -148,20 +174,54 @@ public class Log {
     }
 
     private static void ensureLogDirectoryExists() {
-        File directory = new File(LOGS_DIR_PATH);
+        ensureLogDirectoryExists(LOGS_DIR_PATH);
+    }
+
+    private static void ensureLogDirectoryExists(String path) {
+        File directory = new File(path);
         if (!directory.exists()) {
             boolean created = directory.mkdirs();
             if (!created) {
-                throw new RuntimeException("Failed to create log directory: " + LOGS_DIR_PATH);
+                throw new RuntimeException("Failed to create log directory: " + path);
             }
         }
     }
 
     public void updateState(TradingBotState state) {
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(STATE_FILE_PATH + "state.txt", false))) {
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(STATE_FILE_PATH + clientNumber + "/state.json", false))) {
             writer.write(state.toString());
         } catch (IOException e) {
             throw new RuntimeException(e);
+        }
+    }
+
+    public void writeHttpError(APIError apiError) {
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(STATE_FILE_PATH + clientNumber + "/api_error.json", false))) {
+            writer.write(parseAPIError(apiError));
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public void writeHttpError(Exception e) {
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(STATE_FILE_PATH + clientNumber + "/api_error.json", false))) {
+            writer.write(parseException(e));
+        } catch (IOException ex) {
+            throw new RuntimeException(ex);
+        }
+    }
+
+    public void writeAccountUpdateEvent(double balance, Position position) {
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(STATE_FILE_PATH + clientNumber + "/balance.json", false))) {
+            JSONObject jsonObject = new JSONObject();
+            if (position != null)
+                jsonObject = new JSONObject(position);
+
+            jsonObject.put("balance", balance);
+            jsonObject.put("timestamp", TimeFormatter.now());
+            writer.write(jsonObject.toString(4));
+        } catch (IOException ex) {
+            throw new RuntimeException(ex);
         }
     }
 }

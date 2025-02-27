@@ -4,32 +4,40 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import org.tradebot.domain.OrderBook;
 import org.tradebot.listener.OrderBookCallback;
-import org.tradebot.listener.ReadyStateCallback;
+import org.tradebot.listener.OrderBookStateCallback;
 import org.tradebot.util.Log;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static org.tradebot.util.Settings.SYMBOL;
+
 public class OrderBookHandler {
-    private final Log log = new Log("order_book");
+    private final Log log = new Log("order_book/");
 
-    private final APIService apiService;
-    protected final String symbol;
-    protected final Map<Double, Double> bids = new ConcurrentHashMap<>();
-    protected final Map<Double, Double> asks = new ConcurrentHashMap<>();
-    protected final TreeMap<Long, JSONObject> initializationMessagesQueue = new TreeMap<>();
-    protected List<OrderBookCallback> callbacks = new ArrayList<>();
-    protected ReadyStateCallback readyCallback;
+    private final PublicAPIService publicAPIService;
+    private final Map<Double, Double> bids = new ConcurrentHashMap<>();
+    private final Map<Double, Double> asks = new ConcurrentHashMap<>();
+    private final TreeMap<Long, JSONObject> initializationMessagesQueue = new TreeMap<>();
+    private final List<OrderBookCallback> callbacks = new ArrayList<>();
+    private OrderBookStateCallback initializationStateCallback;
 
-    protected long orderBookLastUpdateId = -1;
-    protected OrderBook snapshot;
-    protected boolean isOrderBookInitialized = false;
+    private long orderBookLastUpdateId = -1;
+    private OrderBook snapshot;
+    private boolean isOrderBookInitialized = false;
 
-    public OrderBookHandler(String symbol,
-                            APIService apiService) {
-        this.apiService = apiService;
-        this.symbol = symbol;
+    private static OrderBookHandler instance;
+
+    public static OrderBookHandler getInstance() {
+        if (instance == null) {
+            instance = new OrderBookHandler();
+        }
+        return instance;
+    }
+
+    private OrderBookHandler() {
+        this.publicAPIService = PublicAPIService.getInstance();
         log.info("OrderBookHandler initialized");
     }
 
@@ -46,7 +54,8 @@ public class OrderBookHandler {
         } else {
             log.warn("Order book out of sync. Reinitialization required.");
             isOrderBookInitialized = false;
-            readyCallback.notifyReadyStateUpdate(false);
+            initializationMessagesQueue.clear();
+            initializationStateCallback.notifyOrderBookStateUpdate(false);
         }
     }
 
@@ -55,7 +64,7 @@ public class OrderBookHandler {
         log.debug(String.format("Message added to initialization queue: %s", message));
 
         if (initializationMessagesQueue.size() < 20) {
-            snapshot = apiService.getOrderBookPublicAPI(symbol).getResponse();
+            snapshot = publicAPIService.getOrderBookPublicAPI(SYMBOL).getResponse();
         } else if (initializationMessagesQueue.size() <= 80) {
             log.info("Applying snapshot and queued updates...");
             orderBookLastUpdateId = snapshot.lastUpdateId();
@@ -85,7 +94,7 @@ public class OrderBookHandler {
                     .filter(entry -> entry.getKey() >= orderBookLastUpdateId)
                     .forEach(entry -> updateOrderBook(entry.getKey(), entry.getValue()));
             isOrderBookInitialized = true;
-            readyCallback.notifyReadyStateUpdate(true);
+            initializationStateCallback.notifyOrderBookStateUpdate(true);
             log.info("Order book successfully initialized.");
         }
     }
@@ -97,7 +106,8 @@ public class OrderBookHandler {
 
         if (isOrderBookInitialized) {
             logOrderBookUpdate();
-            callbacks.forEach(callback -> callback.notifyOrderBookUpdate(asks, bids));
+            callbacks.parallelStream().forEach(callback ->
+                    callback.notifyOrderBookUpdate(asks, bids));
         }
     }
 
@@ -120,8 +130,13 @@ public class OrderBookHandler {
         log.info(String.format("Callback set: %s", callback.getClass().getName()));
     }
 
-    public void setReadyCallback(ReadyStateCallback readyCallback) {
-        this.readyCallback = readyCallback;
+    public void removeCallback(OrderBookCallback callback) {
+        this.callbacks.remove(callback);
+        log.info(String.format("Callback removed: %s", callback.getClass().getName()));
+    }
+
+    public void setInitializationStateCallback(OrderBookStateCallback initializationStateCallback) {
+        this.initializationStateCallback = initializationStateCallback;
     }
 
     public Map<Double, Double> getBids(int limit) {
@@ -156,43 +171,48 @@ public class OrderBookHandler {
     }
 
     public void logAll() {
-        Map<Double, Double> snapshotAsks;
-        synchronized (asks) {
-            snapshotAsks = new TreeMap<>(asks);
+        try {
+            Map<Double, Double> snapshotAsks;
+            synchronized (asks) {
+                snapshotAsks = new TreeMap<>(asks);
+            }
+            Map<Double, Double> snapshotBids;
+            synchronized (bids) {
+                snapshotBids = new TreeMap<>(bids);
+            }
+            TreeMap<Long, JSONObject> snapshotInitializationMessagesQueue;
+            synchronized (initializationMessagesQueue) {
+                snapshotInitializationMessagesQueue = new TreeMap<>(initializationMessagesQueue);
+            }
+            OrderBook snapshotOrderBook = null;
+            if (snapshot != null) {
+                synchronized (snapshot) {
+                    snapshotOrderBook = snapshot;
+                }
+            }
+            log.debug(String.format("""
+                            symbol: %s
+                            callback: %s
+                            readyCallback: %s
+                            bids: %s
+                            asks: %s
+                            orderBookLastUpdateId: %s
+                            isOrderBookInitialized: %s
+                            initializationMessagesQueue: %s
+                            snapshotOrderBook: %s
+                            """,
+                    SYMBOL,
+                    callbacks,
+                    initializationStateCallback,
+                    snapshotBids,
+                    snapshotAsks,
+                    orderBookLastUpdateId,
+                    isOrderBookInitialized,
+                    snapshotInitializationMessagesQueue,
+                    snapshotOrderBook
+            ));
+        } catch (Exception e) {
+            log.warn("Failed to write", e);
         }
-        Map<Double, Double> snapshotBids;
-        synchronized (bids) {
-            snapshotBids = new TreeMap<>(bids);
-        }
-        TreeMap<Long, JSONObject> snapshotInitializationMessagesQueue;
-        synchronized (initializationMessagesQueue) {
-            snapshotInitializationMessagesQueue = new TreeMap<>(initializationMessagesQueue);
-        }
-        OrderBook snapshotOrderBook;
-        synchronized (snapshot) {
-            snapshotOrderBook = snapshot;
-        }
-
-        log.debug(String.format("""
-                        symbol: %s
-                        callback: %s
-                        readyCallback: %s
-                        bids: %s
-                        asks: %s
-                        orderBookLastUpdateId: %s
-                        isOrderBookInitialized: %s
-                        initializationMessagesQueue: %s
-                        snapshotOrderBook: %s
-                        """,
-                symbol,
-                callbacks,
-                readyCallback,
-                snapshotBids,
-                snapshotAsks,
-                orderBookLastUpdateId,
-                isOrderBookInitialized,
-                snapshotInitializationMessagesQueue,
-                snapshotOrderBook
-        ));
     }
 }

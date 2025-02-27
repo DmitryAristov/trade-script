@@ -3,6 +3,7 @@ package org.tradebot.binance;
 import org.tradebot.domain.APIError;
 import org.tradebot.domain.HTTPResponse;
 import org.tradebot.util.Log;
+import org.tradebot.util.OperationHelper;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -11,84 +12,99 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.util.List;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
-import static org.tradebot.service.TradingBot.TEST_RUN;
 import static org.tradebot.util.JsonParser.parseAPIError;
+import static org.tradebot.util.Settings.*;
 
 public class HttpClient {
 
-    private static final String API_KEY;
-    private static final String API_SECRET;
-    private static final String BASE_URL;
-    static {
-        if (TEST_RUN) {
-            API_KEY = "****";
-            API_SECRET = "****";
-            BASE_URL = "https://testnet.binancefuture.com";
-        } else {
-            API_KEY = "****";
-            API_SECRET = "****";
-            BASE_URL = "https://fapi.binance.com";
-        }
+    private final String apiKey;
+    private final String apiSecret;
+    private final OperationHelper operationHelper;
+    private final Map<Long, APIError> errors = new ConcurrentHashMap<>();
+
+    public HttpClient(String apiKey, String apiSecret, int clientNumber) {
+        this.apiKey = apiKey;
+        this.apiSecret = apiSecret;
+        this.operationHelper = new OperationHelper(clientNumber);
+        this.log = new Log(clientNumber);
     }
 
-    private final Log log = new Log();
-    public static long TIME_DIFF = 0;
+    private final Log log;
 
-    public HTTPResponse<String, APIError> sendRequest(String endpoint, String method, Map<String, String> params) {
+    public HTTPResponse<String> sendRequest(String endpoint, String method, Map<String, String> params) {
         return sendRequest(endpoint, method, params, false);
     }
 
-    public HTTPResponse<String, APIError> sendRequest(String endpoint, String method, Map<String, String> params, boolean useBody) {
-        try {
-            long start = System.nanoTime();
-            log.debug(String.format("[REQUEST START] HTTP %s to %s", method, endpoint));
-            log.debug(String.format("Initial params: %s", params));
+    private static int requestsCount = 0;
+    private static int errorsCount = 0;
+    public HTTPResponse<String> sendRequest(String endpoint, String method, final Map<String, String> params, boolean useBody) {
+        return operationHelper.performWithRetry(() -> {
+            final Map<String, String> paramsCopy = new HashMap<>(params);
+            try {
+                long start = System.nanoTime();
+                log.debug(String.format("[REQUEST START] HTTP %s to %s", method, endpoint));
+                log.debug(String.format("Initial params: %s", paramsCopy));
 
-            params.put("recvWindow", "5000");
-            params.put("timestamp", String.valueOf(System.currentTimeMillis() + TIME_DIFF));
-            String signature = generateSignature(params);
-            params.put("signature", signature);
-
-            String query = getParamsString(params);
-            URL url = useBody
-                    ? new URI(BASE_URL + endpoint).toURL()
-                    : new URI(BASE_URL + endpoint + "?" + query).toURL();
-            log.debug(String.format("Generated URL: %s", url));
-
-            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-            connection.setRequestMethod(method);
-            connection.setRequestProperty("X-MBX-APIKEY", API_KEY);
-            connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
-            log.debug(String.format("Request properties: %s", connection.getRequestProperties()));
-
-            if (useBody && (method.equals("POST") || method.equals("PUT") || method.equals("DELETE"))) {
-                connection.setDoOutput(true);
-                try (OutputStream os = connection.getOutputStream()) {
-                    byte[] input = query.getBytes(StandardCharsets.UTF_8);
-                    os.write(input, 0, input.length);
+                if (TEST_RUN && SIMULATE_API_ERRORS) {
+                    requestsCount++;
+                    if (requestsCount % API_ERROR_REPEATING_COUNT == 0) {
+                        errorsCount++;
+                        if (errorsCount % 2 == 0) {
+                            return HTTPResponse.error(500, new APIError(-1, "simulating error response... " + requestsCount));
+                        } else {
+                            throw new RuntimeException("Simulating exception read response... " + requestsCount);
+                        }
+                    }
                 }
-                log.debug(String.format("Request body: %s", query));
-            }
 
-            int responseCode = connection.getResponseCode();
-            log.debug(String.format("Response headers: %s", connection.getHeaderFields()));
-            long finish = System.nanoTime();
-            double elapsedMs = (finish - start) / 1_000_000.0;
-            log.debug(String.format("[REQUEST END] HTTP %s to %s completed in %.2f ms", method, endpoint, elapsedMs));
-            return readResponse(connection, responseCode);
-        } catch (Exception e) {
-            throw log.throwError("Failed to send HTTP request", e);
-        }
+                paramsCopy.put("recvWindow", String.valueOf(RECV_WINDOW));
+                paramsCopy.put("timestamp", String.valueOf(System.currentTimeMillis() + TIME_DIFF));
+                String signature = generateSignature(paramsCopy);
+                paramsCopy.put("signature", signature);
+
+                String query = getParamsString(paramsCopy);
+                URL url = useBody
+                        ? URI.create(BASE_URL + endpoint).toURL()
+                        : URI.create(BASE_URL + endpoint + "?" + query).toURL();
+                log.debug(String.format("Generated URL: %s", url));
+
+                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+                connection.setRequestMethod(method);
+                connection.setRequestProperty("X-MBX-APIKEY", apiKey);
+                connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+                log.debug(String.format("Request properties: %s", connection.getRequestProperties()));
+
+                if (useBody && (method.equals("POST") || method.equals("PUT") || method.equals("DELETE"))) {
+                    connection.setDoOutput(true);
+                    try (OutputStream os = connection.getOutputStream()) {
+                        byte[] input = query.getBytes(StandardCharsets.UTF_8);
+                        os.write(input, 0, input.length);
+                    }
+                    log.debug(String.format("Request body: %s", query));
+                }
+
+                int responseCode = connection.getResponseCode();
+                log.debug(String.format("Response headers: %s", connection.getHeaderFields()));
+                long finish = System.nanoTime();
+                double elapsedMs = (finish - start) / 1_000_000.0;
+                log.debug(String.format("[REQUEST END] HTTP %s to %s completed in %.2f ms", method, endpoint, elapsedMs));
+                return readResponse(connection, responseCode);
+            } catch (Exception e) {
+                log.writeHttpError(e);
+                throw new RuntimeException(e);
+            }
+        });
     }
 
     protected String generateSignature(Map<String, String> params) throws Exception {
         String queryString = getParamsString(params);
         Mac mac = Mac.getInstance("HmacSHA256");
-        SecretKeySpec secretKeySpec = new SecretKeySpec(API_SECRET.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
+        SecretKeySpec secretKeySpec = new SecretKeySpec(apiSecret.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
         mac.init(secretKeySpec);
         byte[] hash = mac.doFinal(queryString.getBytes(StandardCharsets.UTF_8));
         StringBuilder hexString = new StringBuilder();
@@ -107,44 +123,8 @@ public class HttpClient {
                 .collect(Collectors.joining("&"));
     }
 
-    public HTTPResponse<String, APIError> sendPublicRequest(String endpoint, String method, Map<String, String> params) {
-        try {
-            long start = System.nanoTime();
-            log.debug(String.format("[REQUEST START] HTTP %s to %s", method, endpoint));
-
-            String query = getParamsString(params);
-            URL url = new URI(BASE_URL + endpoint + "?" + query).toURL();
-            log.debug(String.format("Generated URL: %s", url));
-
-            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-            connection.setRequestMethod(method);
-            log.debug(String.format("Request properties: %s", connection.getRequestProperties()));
-
-            int responseCode = connection.getResponseCode();
-            Map<String, List<String>> headers = connection.getHeaderFields();
-            log.debug(String.format("Response headers: %s", headers));
-
-            long finish = System.nanoTime();
-            double elapsedMs = (finish - start) / 1_000_000.0;
-            log.debug(String.format("[REQUEST END] HTTP GET to %s completed in %.2f ms", endpoint, elapsedMs));
-
-            return readResponse(connection, responseCode);
-        } catch (Exception e) {
-            throw log.throwError("Failed to send HTTP request", e);
-        }
-    }
-
-//    private int requestsCount = 0;
-    private HTTPResponse<String, APIError> readResponse(HttpURLConnection connection, int responseCode) throws IOException {
-//        if (TEST_RUN) {
-//            requestsCount++;
-//            if (requestsCount % 19 == 0) {
-//                return HTTPResponse.error(responseCode, new APIError(400, "simulating error message... " + requestsCount));
-//            } else if (requestsCount % 26 == 0) {
-//                throw new RuntimeException("Simulating exception when reading response... " + requestsCount);
-//            }
-//        }
-        if (responseCode >= 200 && responseCode < 300) {
+    protected HTTPResponse<String> readResponse(HttpURLConnection connection, int responseCode) throws IOException {
+       if (responseCode >= 200 && responseCode < 300) {
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
                 String response = reader.lines().collect(Collectors.joining());
                 log.debug(String.format("Response code: %d, Response body: %s", responseCode, response));
@@ -154,8 +134,23 @@ public class HttpClient {
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getErrorStream()))) {
                 String errorResponse = reader.lines().collect(Collectors.joining());
                 log.warn(String.format("Response code: %d, Error body: %s", responseCode, errorResponse));
-                return HTTPResponse.error(responseCode, parseAPIError(errorResponse));
+                APIError apiError = parseAPIError(errorResponse);
+                errors.put(System.currentTimeMillis(), apiError);
+                log.writeHttpError(apiError);
+                return HTTPResponse.error(responseCode, apiError);
             }
+        }
+    }
+
+    public void logAll() {
+        try {
+            log.debug(String.format("""
+                            HttpClient state:
+                            errors: %s
+                            """,
+                    errors));
+        } catch (Exception e) {
+            log.warn("Failed to write", e);
         }
     }
 }

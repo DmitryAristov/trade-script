@@ -3,40 +3,42 @@ package org.tradebot.binance;
 import org.json.JSONObject;
 import org.tradebot.domain.MarketEntry;
 import org.tradebot.listener.MarketDataCallback;
-import org.tradebot.listener.OrderBookCallback;
 import org.tradebot.service.TaskManager;
 import org.tradebot.util.Log;
 
 import java.util.*;
-import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.TimeUnit;
 
-public class TradeHandler implements OrderBookCallback {
+import static org.tradebot.util.Settings.*;
 
-    private static final int MAX_TRADE_QUEUE_SIZE = 100000;
-    public static final String MARKET_DATA_UPDATE_TASK_KEY = "market_data_update";
-    private static final double PRICE_DEVIATION_THRESHOLD = 0.015;
-    private final Log log = new Log("market_data");
+public class TradeHandler {
+
+    private final Log log = new Log("market_data/");
 
     private final TaskManager taskManager;
     protected MarketDataCallback callback;
 
     protected Deque<JSONObject> activeQueue = new ArrayDeque<>(MAX_TRADE_QUEUE_SIZE);
     protected Deque<JSONObject> processingQueue = new ArrayDeque<>(MAX_TRADE_QUEUE_SIZE);
-    private Map<Double, Double> bids = new ConcurrentSkipListMap<>(Collections.reverseOrder());
-    private Map<Double, Double> asks = new ConcurrentSkipListMap<>();
     protected Double lastPrice = null;
 
-    public TradeHandler(TaskManager taskManager) {
-        this.taskManager = taskManager;
+    private static TradeHandler instance;
+
+    public static TradeHandler getInstance() {
+        if (instance == null) {
+            instance = new TradeHandler();
+        }
+        return instance;
+    }
+
+    private TradeHandler() {
+        this.taskManager = TaskManager.getInstance();
         log.info("TradeHandler initialized");
     }
 
     public void scheduleTasks() {
-        log.info("Setting up Market Data update task...");
         this.taskManager.scheduleAtFixedRate(MARKET_DATA_UPDATE_TASK_KEY, this::updateMarketPrice,
                 1000 - System.currentTimeMillis() % 1000, 100, TimeUnit.MILLISECONDS);
-        log.info("Market Data update task scheduled");
     }
 
     public void onMessage(JSONObject message) {
@@ -73,7 +75,7 @@ public class TradeHandler implements OrderBookCallback {
 
         MarketEntry entry = processEntry(minPrice, maxPrice, volume);
         if (entry == null) {
-            log.warn("Null market entry");
+            log.debug("empty entry...");
             return;
         }
 //        log.removeLines(1);
@@ -96,9 +98,7 @@ public class TradeHandler implements OrderBookCallback {
     }
 
     public void cancelTasks() {
-        log.info("Cancelling Market Data update task...");
         taskManager.cancel(MARKET_DATA_UPDATE_TASK_KEY);
-        log.info("Cancelling Market Data update task...");
     }
 
     public void setCallback(MarketDataCallback callback) {
@@ -106,36 +106,34 @@ public class TradeHandler implements OrderBookCallback {
         log.info(String.format("Callback set: %s", callback.getClass().getName()));
     }
 
-    @Override
-    public void notifyOrderBookUpdate(Map<Double, Double> asks, Map<Double, Double> bids) {
-        this.asks = asks;
-        this.bids = bids;
-    }
-
     public Double getLastPrice() {
         return lastPrice;
     }
 
     public void logAll() {
-        Deque<JSONObject> snapshotActiveQueue;
-        synchronized (activeQueue) {
-            snapshotActiveQueue = new ArrayDeque<>(activeQueue);
-        }
-        Deque<JSONObject> snapshotProcessingQueue;
-        synchronized (processingQueue) {
-            snapshotProcessingQueue = new ArrayDeque<>(processingQueue);
-        }
+        try {
+            Deque<JSONObject> snapshotActiveQueue;
+            synchronized (activeQueue) {
+                snapshotActiveQueue = new ArrayDeque<>(activeQueue);
+            }
+            Deque<JSONObject> snapshotProcessingQueue;
+            synchronized (processingQueue) {
+                snapshotProcessingQueue = new ArrayDeque<>(processingQueue);
+            }
 
-        log.debug(String.format("""
-                        callback: %s
-                        activeQueue: %s
-                        processingQueue: %s
-                        lastPrice: %s
-                        """,
-                callback,
-                snapshotActiveQueue,
-                snapshotProcessingQueue,
-                lastPrice
-        ));
+            log.debug(String.format("""
+                            callback: %s
+                            activeQueue: %s
+                            processingQueue: %s
+                            lastPrice: %s
+                            """,
+                    callback,
+                    snapshotActiveQueue,
+                    snapshotProcessingQueue,
+                    lastPrice
+            ));
+        } catch (Exception e) {
+            log.warn("Failed to write", e);
+        }
     }
 }

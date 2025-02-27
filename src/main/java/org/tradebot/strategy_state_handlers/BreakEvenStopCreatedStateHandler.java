@@ -1,105 +1,95 @@
-package org.tradebot.service.strategy_state_handlers;
+package org.tradebot.strategy_state_handlers;
 
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.tradebot.binance.APIService;
 import org.tradebot.domain.Order;
 import org.tradebot.domain.Position;
 import org.tradebot.service.OrderManager;
-import org.tradebot.service.OrderManager.OrderType;
 import org.tradebot.util.Log;
 
 import java.util.List;
 
-public class ClosingOrdersCreatedStateHandler implements StateHandler {
-    private final Log log = new Log();
+import static org.tradebot.util.Settings.SYMBOL;
 
-    private final APIService apiService;
+public class BreakEvenStopCreatedStateHandler implements StateHandler {
+
+    private final Log log;
     private final OrderManager orderManager;
-    private final String symbol;
+    private final APIService apiService;
 
-    public ClosingOrdersCreatedStateHandler(APIService apiService,
+    public BreakEvenStopCreatedStateHandler(APIService apiService,
                                             OrderManager orderManager,
-                                            String symbol) {
-        this.apiService = apiService;
+                                            int clientNumber) {
         this.orderManager = orderManager;
-        this.symbol = symbol;
-        log.info("ClosingOrdersCreatedStateHandler initialized");
+        this.apiService = apiService;
+        this.log = new Log(clientNumber);
+        log.info("BreakEvenStopCreatedStateHandler initialized.");
     }
 
     @Override
     public void handle(@Nullable Position position, List<Order> openedOrders) {
+        orderManager.notifyPositionUpdate(position);
         if (position == null) {
             log.info("Position is closed. Resetting state to initial.");
-            orderManager.resetToEmptyPosition(null);
+            orderManager.closePositionAndResetState();
         } else {
             log.info("Position is open. Validating set of closing orders...");
-            if (!validateClosingOrdersState(openedOrders, position)) {
+            if (!validateClosingOrdersState(openedOrders)) {
                 log.warn("Invalid set of closing orders detected.");
                 log.debug(String.format("Position: %s", position));
                 log.debug(String.format("Local orders: %s", orderManager.getOrders()));
                 log.debug(String.format("Actual opened orders: %s", openedOrders));
                 log.info("Closing position and resetting state.");
-                orderManager.closePosition(position);
+                orderManager.closePositionAndResetState();
             } else {
                 log.info("Waiting for position to close...");
             }
         }
     }
 
-    private boolean validateClosingOrdersState(List<Order> openedOrders, @NotNull Position position) {
+    private boolean validateClosingOrdersState(List<Order> openedOrders) {
         log.info("Validating closing orders...");
         int orderCount = openedOrders.size();
         log.debug(String.format("Opened orders count: %d", orderCount));
 
-        switch (orderCount) {
-            case 3 -> {
-                log.info("3 opened orders detected. Validating STOP, TAKE_0, and TAKE_1...");
-                boolean stopLossValid = validateClosingOrder(OrderType.STOP, openedOrders);
-                boolean take0Valid = validateClosingOrder(OrderType.TAKE_0, openedOrders);
-                boolean take1Valid = validateClosingOrder(OrderType.TAKE_1, openedOrders);
-                return stopLossValid && take0Valid && take1Valid;
-            }
-            case 2 -> {
-                log.info("2 opened orders detected. Validating appropriate set...");
-                return validateTwoOrdersState(openedOrders, position);
-            }
-            default -> {
-                log.warn(String.format("Unexpected number of opened orders: %d", orderCount));
-                return false;
-            }
+        if (orderCount == 2) {
+            log.info("2 opened orders detected. Validating appropriate set...");
+            return validateTwoOrdersState(openedOrders);
         }
+        log.warn(String.format("Unexpected number of opened orders: %d", orderCount));
+        return false;
     }
 
-    private boolean validateTwoOrdersState(List<Order> openedOrders, @NotNull Position position) {
-        if (orderManager.getOrders().containsKey(OrderType.TAKE_0)) {
+    private boolean validateTwoOrdersState(List<Order> openedOrders) {
+        Order take0 = orderManager.getOrders().get(OrderManager.OrderType.TAKE_0);
+        if (take0 != null) {
             log.info("First take order is present locally.");
             var take0Opt = openedOrders.stream()
-                    .filter(order -> orderManager.getOrders().get(OrderType.TAKE_0).equals(order.getNewClientOrderId()))
+                    .filter(order -> take0.getNewClientOrderId().equals(order.getNewClientOrderId()))
                     .findFirst();
             if (take0Opt.isEmpty()) {
                 log.info("First take order not found in opened orders. Querying order status...");
-                Order firstTake = apiService.queryOrder(symbol, orderManager.getOrders().get(OrderType.TAKE_0)).getResponse();
+                Order firstTake = apiService.queryOrder(SYMBOL, take0.getNewClientOrderId()).getResponse();
                 log.info(String.format("First take order status: %s", firstTake.getStatus()));
 
-                return handleTake0OrderStatus(firstTake, position);
+                return handleTake0OrderStatus(firstTake);
             } else {
                 log.info("First take order is still opened. No further action required.");
                 return false;
             }
         } else {
             log.info("First take order filled. Validating remaining orders: TAKE_1 and BREAK_EVEN.");
-            boolean take1Valid = validateClosingOrder(OrderType.TAKE_1, openedOrders);
-            boolean breakEvenValid = validateClosingOrder(OrderType.BREAK_EVEN, openedOrders);
+            boolean take1Valid = validateClosingOrder(OrderManager.OrderType.TAKE_1, openedOrders);
+            boolean breakEvenValid = validateClosingOrder(OrderManager.OrderType.BREAK_EVEN, openedOrders);
             return take1Valid && breakEvenValid;
         }
     }
 
-    private boolean handleTake0OrderStatus(Order take0, @NotNull Position position) {
+    private boolean handleTake0OrderStatus(Order take0) {
         switch (take0.getStatus()) {
             case FILLED -> {
                 log.info("First take order filled. Placing break-even stop.");
-                orderManager.handleFirstTakeOrderFilled(position);
+                orderManager.handleFirstTakeOrderFilled();
                 return true;
             }
             case PARTIALLY_FILLED -> {
@@ -113,15 +103,15 @@ public class ClosingOrdersCreatedStateHandler implements StateHandler {
         }
     }
 
-    private boolean validateClosingOrder(OrderType orderType, List<Order> openedOrders) {
-        String localOrderId = orderManager.getOrders().get(orderType);
-        if (localOrderId == null) {
-            log.warn(String.format("%s order client ID is null in local orders.", orderType));
+    private boolean validateClosingOrder(OrderManager.OrderType orderType, List<Order> openedOrders) {
+        Order localOrder = orderManager.getOrders().get(orderType);
+        if (localOrder == null) {
+            log.warn(String.format("%s order is null in local orders.", orderType));
             return false;
         }
 
         boolean isValid = openedOrders.stream()
-                .anyMatch(order -> localOrderId.equals(order.getNewClientOrderId()));
+                .anyMatch(order -> localOrder.getNewClientOrderId().equals(order.getNewClientOrderId()));
 
         if (isValid) {
             log.debug(String.format("%s order is valid in opened orders.", orderType));

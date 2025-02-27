@@ -1,23 +1,23 @@
 package org.tradebot.domain;
 
-public class HTTPResponse<T, E> {
+public class HTTPResponse<T> {
     private final int code;
     private final T value;
-    private final E error;
+    private final APIError error;
     private final boolean isSuccess;
 
-    private HTTPResponse(T value, E error, boolean isSuccess, int code) {
+    private HTTPResponse(T value, org.tradebot.domain.APIError error, boolean isSuccess, int code) {
         this.value = value;
         this.error = error;
         this.isSuccess = isSuccess;
         this.code = code;
     }
 
-    public static <T, E> HTTPResponse<T, E> success(int code, T value) {
+    public static <T> HTTPResponse<T> success(int code, T value) {
         return new HTTPResponse<>(value, null, true, code);
     }
 
-    public static <T, E> HTTPResponse<T, E> error(int code, E error) {
+    public static <T> HTTPResponse<T> error(int code, APIError error) {
         return new HTTPResponse<>(null, error, false, code);
     }
 
@@ -33,7 +33,7 @@ public class HTTPResponse<T, E> {
         return value;
     }
 
-    public E getError() {
+    public APIError getError() {
         return error;
     }
 

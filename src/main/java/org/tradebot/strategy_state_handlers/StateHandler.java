@@ -1,4 +1,4 @@
-package org.tradebot.service.strategy_state_handlers;
+package org.tradebot.strategy_state_handlers;
 
 import org.jetbrains.annotations.Nullable;
 import org.tradebot.domain.Order;
