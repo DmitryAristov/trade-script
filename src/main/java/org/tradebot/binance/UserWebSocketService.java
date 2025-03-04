@@ -3,7 +3,6 @@ package org.tradebot.binance;
 import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.handshake.ServerHandshake;
 import org.json.JSONObject;
-import org.tradebot.domain.APIError;
 import org.tradebot.domain.HTTPResponse;
 import org.tradebot.listener.UserWebSocketCallback;
 import org.tradebot.service.TaskManager;

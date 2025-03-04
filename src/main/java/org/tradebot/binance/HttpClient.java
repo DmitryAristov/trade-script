@@ -2,6 +2,7 @@ package org.tradebot.binance;
 
 import org.tradebot.domain.APIError;
 import org.tradebot.domain.HTTPResponse;
+import org.tradebot.service.TaskManager;
 import org.tradebot.util.Log;
 import org.tradebot.util.OperationHelper;
 
@@ -15,6 +16,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static org.tradebot.util.JsonParser.parseAPIError;
@@ -25,6 +27,7 @@ public class HttpClient {
     private final String apiKey;
     private final String apiSecret;
     private final OperationHelper operationHelper;
+    private final TaskManager taskManager;
     private final Map<Long, APIError> errors = new ConcurrentHashMap<>();
 
     public HttpClient(String apiKey, String apiSecret, int clientNumber) {
@@ -32,6 +35,7 @@ public class HttpClient {
         this.apiSecret = apiSecret;
         this.operationHelper = new OperationHelper(clientNumber);
         this.log = new Log(clientNumber);
+        this.taskManager = TaskManager.getInstance(clientNumber);
     }
 
     private final Log log;
@@ -95,7 +99,7 @@ public class HttpClient {
                 log.debug(String.format("[REQUEST END] HTTP %s to %s completed in %.2f ms", method, endpoint, elapsedMs));
                 return readResponse(connection, responseCode);
             } catch (Exception e) {
-                log.writeHttpError(e);
+                taskManager.schedule(WRITE_HTTP_ERROR_TASK, () -> log.writeHttpError(e), 0, TimeUnit.MILLISECONDS);
                 throw new RuntimeException(e);
             }
         });
@@ -136,7 +140,7 @@ public class HttpClient {
                 log.warn(String.format("Response code: %d, Error body: %s", responseCode, errorResponse));
                 APIError apiError = parseAPIError(errorResponse);
                 errors.put(System.currentTimeMillis(), apiError);
-                log.writeHttpError(apiError);
+                taskManager.schedule(WRITE_HTTP_ERROR_TASK, () -> log.writeHttpError(apiError), 0, TimeUnit.MILLISECONDS);
                 return HTTPResponse.error(responseCode, apiError);
             }
         }

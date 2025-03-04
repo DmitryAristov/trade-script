@@ -2,6 +2,7 @@ package org.tradebot.binance;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.tradebot.domain.HTTPResponse;
 import org.tradebot.domain.Position;
 import org.tradebot.listener.UserDataCallback;
 import org.tradebot.service.TaskManager;
@@ -9,19 +10,20 @@ import org.tradebot.util.Log;
 
 import java.util.concurrent.TimeUnit;
 
-import static org.tradebot.util.JsonParser.parseBalance;
 import static org.tradebot.util.JsonParser.parsePosition;
 import static org.tradebot.util.Settings.BALANCE_UPDATE_TASK;
 import static org.tradebot.util.Settings.SYMBOL;
 
 public class UserDataHandler {
     private final Log log;
-    private UserDataCallback callback;
+    private final APIService apiService;
     private final String baseAsset;
     private final int clientNumber;
+    private UserDataCallback callback;
 
-    public UserDataHandler(int clientNumber, String baseAsset) {
+    public UserDataHandler(APIService apiService, int clientNumber, String baseAsset) {
         this.log = new Log(clientNumber);
+        this.apiService = apiService;
         this.clientNumber = clientNumber;
         this.baseAsset = baseAsset;
     }
@@ -52,7 +54,7 @@ public class UserDataHandler {
                         callback.notifyPositionUpdate(position);
 
                         TaskManager.getInstance(clientNumber).schedule(BALANCE_UPDATE_TASK,
-                                () -> updateBalance(accountUpdate, position), 100, TimeUnit.MILLISECONDS);
+                                () -> updateBalance(position), 20, TimeUnit.MILLISECONDS);
                     }
                     break;
                 }
@@ -71,9 +73,13 @@ public class UserDataHandler {
                 SYMBOL.toUpperCase().equals(positionUpdate.getString("s"));
     }
 
-    private void updateBalance(JSONObject accountUpdate, Position position) {
-        double walletBalance = parseBalance(accountUpdate.getJSONArray("B"), baseAsset);
-        log.writeAccountUpdateEvent(walletBalance, position);
+    private void updateBalance(Position position) {
+        HTTPResponse<Double> response = apiService.getBalance(baseAsset);
+        if (response.isSuccess()) {
+            log.writeAccountUpdateEvent(response.getValue(), position);
+        } else {
+            log.error("Failed to get wallet balance");
+        }
     }
 
     public void setCallback(UserDataCallback callback) {

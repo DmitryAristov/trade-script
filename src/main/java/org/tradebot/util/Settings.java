@@ -10,9 +10,9 @@ public class Settings {
     //APPLICATION BASE SETTINGS
 
 
-    public static final boolean TEST_RUN = false;
+    public static final boolean TEST_RUN = true;
     public static final boolean SIMULATE_API_ERRORS = true;
-    public static final int API_ERROR_REPEATING_COUNT = 20;
+    public static final int API_ERROR_REPEATING_COUNT = 10;
     public static final boolean SIMULATE_RECONNECT_WS = true;
     public static final boolean SIMULATE_WEB_SOCKET_LOST_MESSAGES = false;
     public static final boolean USE_ORDER_BOOK = false;
@@ -27,7 +27,7 @@ public class Settings {
 
     // strategy params
     public static final String SYMBOL = "BTCUSDT";
-    public static final int LEVERAGE = TEST_RUN ? 1 : 10;
+    public static final int LEVERAGE = TEST_RUN ? 1 : 25;
 
     public static final double[] TAKE_PROFIT_THRESHOLDS = new double[]{0.5, 0.75};
     public static final double STOP_LOSS_MULTIPLIER = 0.02;
@@ -113,6 +113,7 @@ public class Settings {
     public static final String MARKET_DATA_UPDATE_TASK_KEY = "market_data_update";
     public static final String STATE_UPDATE_TASK_KEY = "state_update";
     public static final String BALANCE_UPDATE_TASK = "balance_update";
+    public static final String WRITE_HTTP_ERROR_TASK = "write_http_error";
 
     //account specific task key prefixes
     public static final String USER_STREAM_PING_TASK_KEY = "user_stream_ping";

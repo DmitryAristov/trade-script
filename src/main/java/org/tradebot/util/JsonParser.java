@@ -101,7 +101,7 @@ public class JsonParser {
                 Double.parseDouble(account.getString("totalWalletBalance")));
     }
 
-    public static double parseBalance(String value, String baseAsset) {
+    public static double parseAvailableBalance(String value, String baseAsset) {
         double result = 0.;
         JSONArray jsonArray = new JSONArray(value);
         for (int i = 0; i < jsonArray.length(); i++) {
@@ -113,16 +113,22 @@ public class JsonParser {
         return result;
     }
 
-    public static double parseBalance(JSONArray balanceUpdates, String baseAsset) {
-        double balance = 0.;
-        for (int i = 0; i < balanceUpdates.length(); i++) {
-            JSONObject update = balanceUpdates.getJSONObject(i);
-            if (baseAsset.equals(update.getString("a"))) {
-                balance = Double.parseDouble(update.getString("wb"));
+    public static double parseBalance(String value, String baseAsset) {
+        double result = 0.;
+        JSONArray jsonArray = new JSONArray(value);
+        for (int i = 0; i < jsonArray.length(); i++) {
+            JSONObject asset = jsonArray.getJSONObject(i);
+            if ("BNFCR".equals(baseAsset)) {
+                if ("USDC".equals(asset.getString("asset"))) {
+                    result = Double.parseDouble(jsonArray.getJSONObject(i).getString("balance"));
+                    break;
+                }
+            } else if (baseAsset.equals(asset.getString("asset"))) {
+                result = Double.parseDouble(jsonArray.getJSONObject(i).getString("balance"));
                 break;
             }
         }
-        return balance;
+        return result;
     }
 
     public static @Nullable Position parsePosition(JSONObject positionUpdate) {

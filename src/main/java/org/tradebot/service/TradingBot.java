@@ -33,13 +33,12 @@ public class TradingBot {
                     "****",
                     "****",
                     "USDT",
-                    false)
-//            ,
-//            1, new TradingAccountSettings(
-//                    "****",
-//                    "****",
-//                    "USDT",
-//                    true)
+                    false),
+            1, new TradingAccountSettings(
+                    "****",
+                    "****",
+                    "USDT",
+                    true)
     );
 
     private final Precision precision;

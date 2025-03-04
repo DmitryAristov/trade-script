@@ -136,10 +136,6 @@ public class TaskManager {
         log.info("All tasks have been cancelled");
     }
 
-    public void runAsync(String taskPrefix, Runnable task) {
-        schedule(taskPrefix, task, 0, TimeUnit.MILLISECONDS);
-    }
-
     private static class State {
         private final AtomicBoolean isRunning = new AtomicBoolean(false);
         private final AtomicBoolean isCancelled = new AtomicBoolean(false);

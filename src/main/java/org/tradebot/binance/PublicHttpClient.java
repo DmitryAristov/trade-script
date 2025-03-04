@@ -2,6 +2,7 @@ package org.tradebot.binance;
 
 import org.tradebot.domain.APIError;
 import org.tradebot.domain.HTTPResponse;
+import org.tradebot.service.TaskManager;
 import org.tradebot.util.Log;
 import org.tradebot.util.OperationHelper;
 
@@ -15,15 +16,18 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static org.tradebot.util.JsonParser.parseAPIError;
 import static org.tradebot.util.Settings.BASE_URL;
+import static org.tradebot.util.Settings.WRITE_HTTP_ERROR_TASK;
 
 public class PublicHttpClient {
     private final Log log = new Log();
     private final OperationHelper operationHelper = new OperationHelper();
     private final Map<Long, APIError> errors = new ConcurrentHashMap<>();
+    private final TaskManager taskManager = TaskManager.getInstance();
 
     public HTTPResponse<String> sendPublicRequest(String endpoint, String method, Map<String, String> params) {
         return operationHelper.performWithRetry(() -> {
@@ -50,6 +54,7 @@ public class PublicHttpClient {
 
                 return readResponse(connection, responseCode);
             } catch (Exception e) {
+                taskManager.schedule(WRITE_HTTP_ERROR_TASK, () -> log.writeHttpError(e), 0, TimeUnit.MILLISECONDS);
                 throw log.throwError("Failed to send HTTP request", e);
             }
         });
@@ -74,7 +79,7 @@ public class PublicHttpClient {
                 String errorResponse = reader.lines().collect(Collectors.joining());
                 log.warn(String.format("Response code: %d, Error body: %s", responseCode, errorResponse));
                 APIError apiError = parseAPIError(errorResponse);
-                //TODO
+                taskManager.schedule(WRITE_HTTP_ERROR_TASK, () -> log.writeHttpError(apiError), 0, TimeUnit.MILLISECONDS);
                 errors.put(System.currentTimeMillis(), apiError);
                 return HTTPResponse.error(responseCode, apiError);
             }

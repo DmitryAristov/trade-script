@@ -6,7 +6,6 @@ import org.tradebot.service.OrderManager;
 import org.tradebot.service.Strategy;
 import org.tradebot.strategy_state_handlers.*;
 import org.tradebot.util.Log;
-import org.tradebot.util.TimeFormatter;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -33,7 +32,7 @@ public class TradingAccount {
 
         checkAccount(apiService, settings.customLeverage());
 
-        UserDataHandler userDataHandler = new UserDataHandler(clientNumber, settings.baseAsset());
+        UserDataHandler userDataHandler = new UserDataHandler(apiService, clientNumber, settings.baseAsset());
         userWebSocketService = new UserWebSocketService(userDataHandler, httpClient, clientNumber);
 
         StrategyStateDispatcher stateDispatcher = new StrategyStateDispatcher(clientNumber);

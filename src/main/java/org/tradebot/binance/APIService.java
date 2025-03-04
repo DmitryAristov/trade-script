@@ -138,7 +138,16 @@ public class APIService {
         }
     }
 
-    public HTTPResponse<Double> getAccountBalance(String baseAsset) {
+    public HTTPResponse<Double> getAvailableBalance(String baseAsset) {
+        HTTPResponse<String> response = httpClient.sendRequest("/fapi/v2/balance", "GET", new HashMap<>());
+        if (response.isSuccess()) {
+            return HTTPResponse.success(response.getStatusCode(), parseAvailableBalance(response.getValue(), baseAsset));
+        } else {
+            return HTTPResponse.error(response.getStatusCode(), response.getError());
+        }
+    }
+
+    public HTTPResponse<Double> getBalance(String baseAsset) {
         HTTPResponse<String> response = httpClient.sendRequest("/fapi/v2/balance", "GET", new HashMap<>());
         if (response.isSuccess()) {
             return HTTPResponse.success(response.getStatusCode(), parseBalance(response.getValue(), baseAsset));

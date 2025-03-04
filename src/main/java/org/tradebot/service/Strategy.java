@@ -1,19 +1,14 @@
 package org.tradebot.service;
 
-import org.tradebot.binance.APIService;
-import org.tradebot.binance.HttpClient;
 import org.tradebot.domain.*;
 import org.tradebot.listener.ImbalanceStateCallback;
 import org.tradebot.listener.OrderBookCallback;
 import org.tradebot.listener.UserWebSocketCallback;
 import org.tradebot.listener.MarketDataWebSocketCallback;
-import org.tradebot.strategy_state_handlers.StrategyStateDispatcher;
 import org.tradebot.util.Log;
 
 import java.util.Map;
-import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 

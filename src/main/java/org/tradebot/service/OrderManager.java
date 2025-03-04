@@ -81,7 +81,7 @@ public class OrderManager implements UserDataCallback {
             log.info("Client is using custom leverage: " + leverage);
         }
 
-        double balance = apiService.getAccountBalance(baseAsset).getResponse();
+        double balance = apiService.getAvailableBalance(baseAsset).getResponse();
         log.info(String.format("Client balance when opening position: %.2f", balance));
 
         double quantity = balance * RISK_LEVEL * leverage / price;
@@ -271,15 +271,8 @@ public class OrderManager implements UserDataCallback {
         if (orderAlreadyPlaced(error, OrderType.STOP)) {
             if (shouldReplaceOrder(OrderType.STOP)) {
                 log.info("Stop order is not correct, replacing...");
-                var response_ = apiService.modifyOrder(stop);
-                if (response_.isSuccess()) {
-                    log.info("Stop order modified successfully.");
-                    return true;
-                } else {
-                    log.info("Modification error, replacing with new order...");
-                    apiService.cancelOrder(SYMBOL, orders.get(OrderType.STOP).getNewClientOrderId());
-                    return placeStopOrder();
-                }
+                apiService.cancelOrder(SYMBOL, orders.get(OrderType.STOP).getNewClientOrderId());
+                return placeStopOrder();
             }
             log.info("Stop order is correct.");
             return true;
@@ -311,15 +304,8 @@ public class OrderManager implements UserDataCallback {
         if (orderAlreadyPlaced(error, OrderType.TAKE_0)) {
             if (shouldReplaceOrder(OrderType.TAKE_0)) {
                 log.info("First take order is not correct, replacing...");
-                var response_ = apiService.modifyOrder(take);
-                if (response_.isSuccess()) {
-                    log.info("First take order modified successfully.");
-                    return true;
-                } else {
-                    log.info("Modification error, replacing with new order...");
-                    apiService.cancelOrder(SYMBOL, orders.get(OrderType.TAKE_0).getNewClientOrderId());
-                    return placeFirstTakeOrder();
-                }
+                apiService.cancelOrder(SYMBOL, orders.get(OrderType.TAKE_0).getNewClientOrderId());
+                return placeFirstTakeOrder();
             }
             log.info("First take order is correct.");
             return true;
@@ -351,15 +337,8 @@ public class OrderManager implements UserDataCallback {
         if (orderAlreadyPlaced(error, OrderType.TAKE_1)) {
             if (shouldReplaceOrder(OrderType.TAKE_1)) {
                 log.info("Second take order is not correct, replacing...");
-                var response_ = apiService.modifyOrder(take);
-                if (response_.isSuccess()) {
-                    log.info("Second take order modified successfully.");
-                    return true;
-                } else {
-                    log.info("Modification error, replacing with new order...");
-                    apiService.cancelOrder(SYMBOL, orders.get(OrderType.TAKE_1).getNewClientOrderId());
-                    return placeSecondTakeOrder();
-                }
+                apiService.cancelOrder(SYMBOL, orders.get(OrderType.TAKE_1).getNewClientOrderId());
+                return placeSecondTakeOrder();
             }
             log.info("Second take order is correct.");
             return true;
@@ -439,6 +418,7 @@ public class OrderManager implements UserDataCallback {
             log.info("Position close order is placed. Order details: " + response.getValue());
             return;
         } else if (TEST_RUN) {
+            //TODO store time to auto close position
             taskManager.schedule(HANDLE_CLOSE_POSITION_TASK_KEY, this::closePositionAndResetState, 5, TimeUnit.MILLISECONDS);
         }
 
@@ -490,90 +470,7 @@ public class OrderManager implements UserDataCallback {
 
     private void scheduleUnexpectedErrorHandlerTask() {
         taskManager.schedule(CHECK_ORDERS_API_MODE_TASK_KEY, this::checkOrdersAPI, 1, TimeUnit.SECONDS);
-//        taskManager.scheduleAtFixedRate(UNEXPECTED_BOT_STATE_TASK_KEY, () -> {
-//            log.info("Unexpected program state got. Checking...");
-//            apiCheckProgress.set(true);
-//
-//            try {
-//                CompletableFuture<HTTPResponse<Position>> positionResponseFuture = CompletableFuture.supplyAsync(() ->
-//                        operationHelper.performWithRetry(() -> apiService.getOpenPosition(SYMBOL)));
-//                CompletableFuture<HTTPResponse<List<Order>>> ordersResponseFuture = CompletableFuture.supplyAsync(() ->
-//                        operationHelper.performWithRetry(() -> apiService.getOpenOrders(SYMBOL)));
-//
-//                HTTPResponse<Position> positionResponse = positionResponseFuture.get();
-//                HTTPResponse<List<Order>> ordersResponse = ordersResponseFuture.get();
-//
-//                if (positionResponse.isSuccess() && ordersResponse.isSuccess()) {
-//                    Position actualPosition = positionResponse.getValue();
-//                    checkPositionAPI(actualPosition, ordersResponse.getValue());
-//                    log.info("Position is up to date.");
-//                } else {
-//                    log.error("HTTP connection failure: " + positionResponse.getError());
-//                }
-//            } catch (Exception e) {
-//                log.error("HTTP connection failure.", e);
-//            } finally {
-//                apiCheckProgress.set(false);
-//            }
-//
-//        }, 2, 2, TimeUnit.SECONDS);
     }
-
-//    private void checkPositionAPI(Position actualPosition, List<Order> actualOrders) {
-//        if (actualPosition == null) {
-//            log.info("Actual position is empty. Resetting...");
-//            closePositionAndResetState();
-//            position.set(null);
-//            apiCheckProgress.set(false);
-//            taskManager.cancel(UNEXPECTED_BOT_STATE_TASK_KEY);
-//            return;
-//        }
-//
-//        log.info("Actual position is not empty.");
-//        log.debug(actualPosition.toString());
-//        log.debug(String.valueOf(position.get()));
-//        position.set(actualPosition);
-//
-//        Order open = orders.get(OrderType.OPEN);
-//        if (open == null) {
-//            log.error("Open order is not present in local orders.");
-//            return;
-//        }
-//
-//        if (position.get().getPositionAmt() == open.getQuantity().doubleValue()) {
-//            boolean stopValid = validateOrder(OrderType.STOP, actualOrders);
-//            boolean take0Valid = validateOrder(OrderType.TAKE_0, actualOrders);
-//            boolean take1Valid = validateOrder(OrderType.TAKE_1, actualOrders);
-//            if (!stopValid || !take0Valid || !take1Valid) {
-//                log.info("Missed some/all of 3 stop orders. Placing...");
-//                handleOpenOrderFilled();
-//            }
-//            apiCheckProgress.set(false);
-//            taskManager.cancel(UNEXPECTED_BOT_STATE_TASK_KEY);
-//            return;
-//        }
-//
-//        boolean breakEvenValid = validateOrder(OrderType.BREAK_EVEN, actualOrders);
-//        boolean take1Valid = validateOrder(OrderType.TAKE_1, actualOrders);
-//        if (!breakEvenValid || !take1Valid) {
-//            log.info("Missed some/all of 2 stop orders. Placing...");
-//            handleFirstTakeOrderFilled();
-//        }
-//        apiCheckProgress.set(false);
-//        taskManager.cancel(UNEXPECTED_BOT_STATE_TASK_KEY);
-//    }
-
-//    private boolean validateOrder(OrderType orderType, List<Order> actualOrders) {
-//        Order local = orders.get(orderType);
-//        if (local == null) {
-//            log.info(String.format("%s order client ID is null in local orders.", orderType));
-//            return false;
-//        }
-//        boolean exists = actualOrders.stream()
-//                .anyMatch(order -> local.getNewClientOrderId().equals(order.getNewClientOrderId()));
-//        log.info(orderType + " order exists in actual orders list = " + exists);
-//        return exists;
-//    }
 
     public synchronized State getState() {
         return state.get();
