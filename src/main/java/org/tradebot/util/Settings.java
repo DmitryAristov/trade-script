@@ -10,7 +10,7 @@ public class Settings {
     //APPLICATION BASE SETTINGS
 
 
-    public static final boolean TEST_RUN = true;
+    public static final boolean TEST_RUN = false;
     public static final boolean SIMULATE_API_ERRORS = true;
     public static final int API_ERROR_REPEATING_COUNT = 10;
     public static final boolean SIMULATE_RECONNECT_WS = true;
